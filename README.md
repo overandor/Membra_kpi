@@ -84,6 +84,34 @@ Membra KPI turns raw MEMBRA activity into proof-backed dashboards, investor metr
 - owner earnings report
 - proof audit report
 
-## Current stage
+## Production runtime
 
-Module scaffold. The working KPI app currently lives in `overandor/membra/app.py`; this repo should become the dedicated home for the KPI generator and MEMBRA analytics reports.
+This repo now contains a Hugging Face-ready `app.py` that profiles uploaded CSV, Excel, JSON, JSONL, or Parquet datasets, generates structured KPI catalogs through Groq, exports JSON/CSV, and exposes Stripe entitlement hooks.
+
+Required secrets:
+
+- `GROQ_API_KEY`
+- `STRIPE_SECRET_KEY`
+- `STRIPE_WEBHOOK_SECRET`
+- `STRIPE_PRICE_ID`
+- `APP_BASE_URL`
+
+Optional settings:
+
+- `GROQ_MODEL`
+- `REQUIRE_STRIPE=true`
+- `FREE_DAILY_LIMIT`
+- `PAID_DAILY_LIMIT`
+- `ADMIN_TOKEN`
+
+## API routes
+
+- `GET /api/health`
+- `GET /api/entitlement?email=user@example.com`
+- `POST /api/stripe/create-checkout-session`
+- `POST /api/stripe/webhook`
+- `POST /api/admin/grant`
+
+## Deploy
+
+Create a Hugging Face Gradio Space, connect this repository, add the secrets above, and run the Space from `app.py`.
