@@ -1,4 +1,15 @@
-const DEFAULT_API = 'https://membra-kpi-api.example.com';
+async function loadVercelConfig() {
+  try {
+    const res = await fetch('/api/config');
+    if (!res.ok) return;
+    const data = await res.json();
+    if (data.apiBase && !localStorage.getItem('MEMBRA_API_BASE') && !window.MEMBRA_API_BASE) {
+      window.MEMBRA_API_BASE = data.apiBase.replace(/\/$/, '');
+    }
+  } catch (_) {
+    // Static hosting without Vercel functions is still supported through ?api= or localStorage.
+  }
+}
 
 function configuredApiBase() {
   const url = new URL(window.location.href);
@@ -80,7 +91,7 @@ async function loadDashboard() {
 
   if (!api) {
     setHtml('connectionStatus', statusBadge(false, 'backend not configured'));
-    setText('healthJson', pretty({ message: 'Set MEMBRA_API_BASE or use ?api=https://your-backend.example.com' }));
+    setText('healthJson', pretty({ message: 'Set MEMBRA_API_BASE in Vercel env or use ?api=https://your-backend.example.com' }));
     renderCounts({});
     return;
   }
@@ -172,7 +183,8 @@ async function replayOutbox() {
   }
 }
 
-document.addEventListener('DOMContentLoaded', () => {
+document.addEventListener('DOMContentLoaded', async () => {
+  await loadVercelConfig();
   const form = qs('photoForm');
   if (form) form.addEventListener('submit', submitPhotoForm);
   if (qs('dashboardStats')) loadDashboard();
