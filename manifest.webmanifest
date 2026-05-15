@@ -1,0 +1,17 @@
+{
+  "name": "MEMBRA KPI",
+  "short_name": "MEMBRA",
+  "description": "MEMBRA KPI dashboard and landing page for assetification, ProofBook records, KPI cards, and owner-confirmed listings.",
+  "start_url": "/dashboard",
+  "display": "standalone",
+  "background_color": "#050403",
+  "theme_color": "#ff8a1f",
+  "icons": [
+    {
+      "src": "/assets/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
