@@ -22,6 +22,8 @@ from starlette.middleware.trustedhost import TrustedHostMiddleware
 
 from membra_kpi.assetification import assetify_from_context
 from membra_kpi.deep_backend import BackendContext, apply_deep_backend_schema, backend_status, verify_chain
+from membra_kpi.event_outbox import ensure_event_outbox, enqueue_event, mark_delivered, mark_failed, outbox_stats, pending_events
+from membra_kpi.events import deliver_event
 from membra_kpi.marketplace import confirm_visibility, create_listing_draft, request_visibility
 from membra_kpi.product_router import build_product_router
 from membra_kpi.proofbook import create_proof_entry, sha256_payload
@@ -29,7 +31,7 @@ from membra_kpi.security import apply_security_headers, enforce_rate_limit, vali
 from membra_kpi.solana_devnet import anchor_listing_on_solana_devnet, solana_devnet_status
 
 APP_NAME = "MEMBRA KPI Assetification Marketplace"
-APP_VERSION = "1.3.0"
+APP_VERSION = "1.4.0"
 APP_ENV = os.getenv("APP_ENV", "development")
 APP_BASE_URL = os.getenv("APP_BASE_URL", "http://localhost:8000").rstrip("/")
 DB_PATH = Path(os.getenv("DB_PATH", "./data/membra.db"))
@@ -53,6 +55,7 @@ if ALLOWED_HOSTS != ["*"]:
 app.mount("/static", StaticFiles(directory="static"), name="static")
 templates = Jinja2Templates(directory="templates")
 
+
 @app.middleware("http")
 async def security_middleware(request: Request, call_next):
     enforce_rate_limit(request)
@@ -60,11 +63,14 @@ async def security_middleware(request: Request, call_next):
     apply_security_headers(response)
     return response
 
+
 def now() -> str:
     return dt.datetime.now(dt.timezone.utc).isoformat()
 
+
 def new_id(prefix: str) -> str:
     return f"{prefix}_{uuid.uuid4().hex[:12]}"
+
 
 def db() -> sqlite3.Connection:
     conn = sqlite3.connect(DB_PATH, timeout=30, isolation_level=None)
@@ -73,18 +79,22 @@ def db() -> sqlite3.Connection:
     conn.execute("PRAGMA foreign_keys=ON")
     return conn
 
+
 def rows(sql: str, params: tuple[Any, ...] = ()) -> list[dict[str, Any]]:
     with db() as conn:
         return [dict(r) for r in conn.execute(sql, params).fetchall()]
+
 
 def one(sql: str, params: tuple[Any, ...] = ()) -> dict[str, Any] | None:
     with db() as conn:
         r = conn.execute(sql, params).fetchone()
         return dict(r) if r else None
 
+
 def execute(sql: str, params: tuple[Any, ...] = ()) -> None:
     with db() as conn:
         conn.execute(sql, params)
+
 
 def init_db() -> None:
     with db() as conn:
@@ -103,9 +113,12 @@ CREATE TABLE IF NOT EXISTS admin_decisions(decision_id TEXT PRIMARY KEY, subject
 CREATE TABLE IF NOT EXISTS marketplace_events(event_id TEXT PRIMARY KEY, listing_id TEXT, event_type TEXT, metadata_json TEXT, created_at TEXT);
 """)
         apply_deep_backend_schema(conn)
+        ensure_event_outbox(conn)
+
 
 init_db()
 app.include_router(build_product_router(db))
+
 
 def insert_proof(subject_type: str, subject_id: str, event_type: str, metadata: dict[str, Any] | None = None) -> dict[str, Any]:
     entry = create_proof_entry(subject_type, subject_id, event_type, metadata or {})
@@ -113,23 +126,83 @@ def insert_proof(subject_type: str, subject_id: str, event_type: str, metadata: 
     execute("INSERT INTO proofbook_entries(proof_id,subject_type,subject_id,event_type,proof_hash,metadata_json,created_at) VALUES(?,?,?,?,?,?,?)", (row["proof_id"], row["subject_type"], row["subject_id"], row["event_type"], row["proof_hash"], row["metadata_json"], row["created_at"]))
     return row
 
+
+def emit_domain_event(
+    event_type: str,
+    *,
+    subject_type: str,
+    subject_id: str,
+    owner_id: str | None = None,
+    payload: dict[str, Any] | None = None,
+    consent_scope: str | None = None,
+    risk_level: str = "normal",
+    correlation_id: str | None = None,
+    causation_id: str | None = None,
+) -> dict[str, Any]:
+    """Persist a canonical MEMBRA event into the local outbox.
+
+    Downstream delivery is intentionally separated from domain writes. This makes
+    KPI durable when API, ProofBook, Wallet, Admin, or QR Gateway are offline.
+    """
+    with db() as conn:
+        event = enqueue_event(
+            conn,
+            event_type,
+            subject_type=subject_type,
+            subject_id=subject_id,
+            owner_id=owner_id,
+            payload=payload or {},
+            consent_scope=consent_scope,
+            risk_level=risk_level,
+            correlation_id=correlation_id,
+            causation_id=causation_id,
+        )
+    insert_proof(
+        "event_outbox",
+        event["event_id"],
+        "event_outbox_enqueued",
+        {"event_type": event_type, "subject_type": subject_type, "subject_id": subject_id, "owner_id": owner_id, "proof_hash": event.get("proof_hash")},
+    )
+    return event
+
+
 def require_admin(token: str | None) -> None:
     if not verify_admin_token(token, plain_token=ADMIN_TOKEN, token_hash=ADMIN_TOKEN_SHA256 or None):
         raise HTTPException(status_code=401, detail="Valid admin token required")
 
+
 def dashboard_payload() -> dict[str, Any]:
-    return {"counts": {"photos": one("SELECT COUNT(*) c FROM photos")["c"], "inventory": one("SELECT COUNT(*) c FROM inventory_items")["c"], "drafts": one("SELECT COUNT(*) c FROM listing_drafts")["c"], "public_listings": one("SELECT COUNT(*) c FROM public_listings")["c"], "kpis": one("SELECT COUNT(*) c FROM kpi_cards")["c"], "proofs": one("SELECT COUNT(*) c FROM proofbook_entries")["c"]}}
+    with db() as conn:
+        event_stats = outbox_stats(conn)
+    return {
+        "counts": {
+            "photos": one("SELECT COUNT(*) c FROM photos")["c"],
+            "inventory": one("SELECT COUNT(*) c FROM inventory_items")["c"],
+            "drafts": one("SELECT COUNT(*) c FROM listing_drafts")["c"],
+            "public_listings": one("SELECT COUNT(*) c FROM public_listings")["c"],
+            "kpis": one("SELECT COUNT(*) c FROM kpi_cards")["c"],
+            "proofs": one("SELECT COUNT(*) c FROM proofbook_entries")["c"],
+            "event_outbox_pending": event_stats.get("pending", 0),
+            "event_outbox_failed": event_stats.get("failed", 0),
+            "event_outbox_delivered": event_stats.get("delivered", 0),
+            "event_outbox_dead_letter": event_stats.get("dead_letter", 0),
+        }
+    }
+
 
 def page(request: Request, name: str, **context: Any) -> HTMLResponse:
     return templates.TemplateResponse(name, {"request": request, "app_name": APP_NAME, "app_env": APP_ENV, **context})
+
 
 @app.get("/", response_class=HTMLResponse)
 def home(request: Request):
     return page(request, "index.html", dashboard=dashboard_payload())
 
+
 @app.get("/api/health")
 def health():
-    return {"ok": True, "app": APP_NAME, "version": APP_VERSION, "env": APP_ENV, "product_router_mounted": True}
+    return {"ok": True, "app": APP_NAME, "version": APP_VERSION, "env": APP_ENV, "product_router_mounted": True, "event_outbox": True}
+
 
 @app.get("/api/ready")
 def ready():
@@ -138,16 +211,25 @@ def ready():
         warnings.append("ADMIN_TOKEN is default")
     if not STRIPE_SECRET_KEY:
         warnings.append("Stripe not configured; eligibility records only")
-    return {"ok": True, "counts": dashboard_payload()["counts"], "deep_backend": api_deep_backend_status(), "solana_devnet": solana_devnet_status(), "warnings": warnings}
+    if not os.getenv("MEMBRA_EVENT_SECRET"):
+        warnings.append("MEMBRA_EVENT_SECRET not configured; outbox events are unsigned")
+    if not os.getenv("MEMBRA_EVENT_SINKS"):
+        warnings.append("MEMBRA_EVENT_SINKS not configured; outbox replay has no downstream targets")
+    with db() as conn:
+        event_stats = outbox_stats(conn)
+    return {"ok": True, "counts": dashboard_payload()["counts"], "event_outbox": event_stats, "deep_backend": api_deep_backend_status(), "solana_devnet": solana_devnet_status(), "warnings": warnings}
+
 
 @app.get("/api/deep-backend/status")
 def api_deep_backend_status():
     with db() as conn:
         return backend_status(conn)
 
+
 @app.get("/api/solana/devnet/status")
 def api_solana_status():
     return solana_devnet_status()
+
 
 @app.post("/api/listings/{listing_id}/anchor-devnet")
 def api_anchor_listing_devnet(listing_id: str, x_admin_token: str | None = Header(default=None)):
@@ -162,28 +244,87 @@ def api_anchor_listing_devnet(listing_id: str, x_admin_token: str | None = Heade
     with db() as conn:
         context = BackendContext(actor_id="admin", role="platform_admin")
         result = anchor_listing_on_solana_devnet(conn, context, listing, proof_hash=proof["proof_hash"])
-    return {"success": result.get("error") is None, "anchor": result}
+    event = emit_domain_event(
+        "proof_reviewed",
+        subject_type="listing",
+        subject_id=listing_id,
+        owner_id=listing.get("owner_id"),
+        payload={"action": "solana_devnet_anchor_requested", "network": "solana-devnet", "proof": proof, "anchor": result},
+        consent_scope="proof hash and devnet anchor metadata only",
+        risk_level="normal",
+    )
+    return {"success": result.get("error") is None, "anchor": result, "event": event}
+
 
 @app.get("/api/proofbook/chain")
 def api_proofbook_chain():
     with db() as conn:
         return verify_chain(conn)
 
+
 @app.get("/api/dashboard")
 def api_dashboard():
     return dashboard_payload()
+
 
 @app.get("/api/listings/public")
 def api_public_listings():
     return {"public_listings": rows("SELECT * FROM public_listings ORDER BY created_at DESC")}
 
+
 @app.get("/api/listings/drafts")
 def api_listing_drafts():
     return {"drafts": rows("SELECT * FROM listing_drafts ORDER BY created_at DESC")}
 
+
 @app.get("/api/proofbook")
 def api_proofbook():
     return {"proofbook": rows("SELECT * FROM proofbook_entries ORDER BY created_at DESC"), "chain": api_proofbook_chain()}
+
+
+@app.get("/api/events/outbox")
+def api_event_outbox(status: str | None = None, limit: int = 250):
+    allowed = {None, "pending", "delivered", "failed", "dead_letter"}
+    if status not in allowed:
+        raise HTTPException(400, "status must be pending, delivered, failed, or dead_letter")
+    limit = max(1, min(limit, 500))
+    if status:
+        out = rows("SELECT * FROM event_outbox WHERE status=? ORDER BY created_at DESC LIMIT ?", (status, limit))
+    else:
+        out = rows("SELECT * FROM event_outbox ORDER BY created_at DESC LIMIT ?", (limit,))
+    return {"events": out}
+
+
+@app.get("/api/events/outbox/stats")
+def api_event_outbox_stats():
+    with db() as conn:
+        return {"event_outbox": outbox_stats(conn)}
+
+
+@app.post("/api/events/outbox/replay")
+async def api_event_outbox_replay(limit: int = 50, x_admin_token: str | None = Header(default=None)):
+    require_admin(x_admin_token)
+    limit = max(1, min(limit, 200))
+    results: list[dict[str, Any]] = []
+    with db() as conn:
+        events = pending_events(conn, limit=limit)
+    for event in events:
+        outbox_id = event.pop("_outbox_id")
+        event.pop("_attempt_count", None)
+        delivery = await deliver_event(event)
+        with db() as conn:
+            if delivery and all(item.get("ok") for item in delivery):
+                mark_delivered(conn, outbox_id)
+                insert_proof("event_outbox", event["event_id"], "event_outbox_delivered", {"delivery": delivery})
+                status = "delivered"
+            else:
+                error = "No MEMBRA_EVENT_SINKS configured" if not delivery else json.dumps(delivery, default=str)
+                mark_failed(conn, outbox_id, error)
+                insert_proof("event_outbox", event["event_id"], "event_outbox_failed", {"delivery": delivery, "error": error})
+                status = "failed"
+        results.append({"event_id": event["event_id"], "status": status, "delivery": delivery})
+    return {"processed": len(results), "results": results}
+
 
 @app.post("/api/listings/{listing_id}/request-visibility")
 def api_request_visibility(listing_id: str):
@@ -192,8 +333,18 @@ def api_request_visibility(listing_id: str):
         raise HTTPException(404, "Draft listing not found")
     updated = request_visibility(draft)
     execute("UPDATE listing_drafts SET status=?, owner_visibility_requested_at=? WHERE listing_id=?", (updated["status"], updated["owner_visibility_requested_at"], listing_id))
-    insert_proof("listing", listing_id, "visibility_requested", {"status": updated["status"]})
-    return {"success": True, "listing": updated}
+    proof = insert_proof("listing", listing_id, "visibility_requested", {"status": updated["status"]})
+    event = emit_domain_event(
+        "visibility_requested",
+        subject_type="listing",
+        subject_id=listing_id,
+        owner_id=draft.get("owner_id") or draft.get("user_id"),
+        payload={"draft": draft, "listing": updated, "proof": proof},
+        consent_scope="owner requested internal marketplace visibility; proof and listing metadata only",
+        risk_level="medium",
+    )
+    return {"success": True, "listing": updated, "event": event}
+
 
 @app.post("/api/listings/{listing_id}/confirm-visibility")
 def api_confirm_visibility(listing_id: str):
@@ -204,8 +355,35 @@ def api_confirm_visibility(listing_id: str):
     p = public.to_dict()
     execute("UPDATE listing_drafts SET status=?, owner_confirmed_at=? WHERE listing_id=?", (updated["status"], updated["owner_confirmed_at"], listing_id))
     execute("INSERT INTO public_listings VALUES(?,?,?,?,?,?,?,?,?,?)", (p["public_listing_id"], p["listing_id"], p["sku"], p["title"], p["description"], p["price_low"], p["price_high"], p["pricing_unit"], p["visibility_status"], p["created_at"]))
-    insert_proof("listing", listing_id, "visibility_confirmed", {"public_listing_id": p["public_listing_id"]})
-    return {"success": True, "listing": updated, "public_listing": p}
+    proof = insert_proof("listing", listing_id, "visibility_confirmed", {"public_listing_id": p["public_listing_id"]})
+    amount = round((float(p.get("price_low") or 0) + float(p.get("price_high") or 0)) / 2, 2)
+    owner_id = draft.get("owner_id") or draft.get("user_id") or "owner_default"
+    payout_id = new_id("payout")
+    ledger_id = new_id("ledger")
+    execute("INSERT INTO payout_eligibility VALUES(?,?,?,?,?,?,?,?)", (payout_id, owner_id, "listing", listing_id, amount, "owner_confirmed_marketplace_visibility", "eligible_pending_external_settlement", now()))
+    execute("INSERT INTO wallet_events VALUES(?,?,?,?,?,?,?,?,?)", (ledger_id, owner_id, "listing", listing_id, amount, "payout_eligibility_created", "eligible_pending_external_settlement", json.dumps({"public_listing_id": p["public_listing_id"]}, default=str), now()))
+    payout_proof = insert_proof("listing", listing_id, "payout_eligibility_created", {"payout_event_id": payout_id, "ledger_event_id": ledger_id, "eligible_amount_usd": amount})
+    visibility_event = emit_domain_event(
+        "visibility_confirmed",
+        subject_type="listing",
+        subject_id=listing_id,
+        owner_id=owner_id,
+        payload={"draft": draft, "listing": updated, "public_listing": p, "proof": proof, "eligible_amount_usd": amount, "destination_url": f"{APP_BASE_URL}/marketplace/{p['public_listing_id']}"},
+        consent_scope="owner confirmed marketplace visibility; listing, proof, QR, and payout-eligibility metadata only",
+        risk_level="normal",
+    )
+    payout_event = emit_domain_event(
+        "payout_eligibility_created",
+        subject_type="listing",
+        subject_id=listing_id,
+        owner_id=owner_id,
+        payload={"payout_event_id": payout_id, "ledger_event_id": ledger_id, "eligible_amount_usd": amount, "proof": payout_proof, "public_listing_id": p["public_listing_id"]},
+        consent_scope="payout eligibility metadata only; external rails settle money",
+        risk_level="normal",
+        correlation_id=visibility_event["event_id"],
+    )
+    return {"success": True, "listing": updated, "public_listing": p, "events": [visibility_event, payout_event]}
+
 
 if __name__ == "__main__":
     uvicorn.run("app:app", host="0.0.0.0", port=int(os.getenv("PORT", "8000")), reload=False)
