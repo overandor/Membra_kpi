@@ -13,6 +13,7 @@ from .huggingface_endpoints import create_hf_bundle_for_listing, create_hf_infer
 from .info_gauntlets import create_info_gauntlet_service, list_info_bits
 from .inverted_llm import create_inverted_llm_plan, record_inverted_llm_outcome, score_orchestration_outcome, skill_registry
 from .language_fi import language_fi_status, localize_listing_stub
+from .llm_concierge import concierge_reply
 from .microoverworker import create_microoverworker_product_bundle, microoverworker_status
 from .partner_endpoints import create_partner_endpoint_plan, partner_by_id, partner_catalog
 from .provider_api import get_all_provider_status, get_google_status, get_iot_status, get_provider_requirements, get_web3_status
@@ -32,6 +33,13 @@ def build_product_router(db_factory: Callable[[], sqlite3.Connection]) -> APIRou
             actor_id=str(payload.get("actor_id", "product-api")),
             role=str(payload.get("role", "system")),
         )
+
+    @router.post("/ai/concierge")
+    async def ai_concierge(payload: dict[str, Any]):
+        message = str(payload.get("message", ""))
+        client_context = payload.get("context", {}) if isinstance(payload.get("context", {}), dict) else {}
+        with db_factory() as conn:
+            return await concierge_reply(conn, message=message, client_context=client_context)
 
     @router.get("/golden-prime/workflow")
     def golden_prime_workflow(step_count: int = 8):
