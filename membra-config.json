@@ -1,0 +1,5 @@
+{
+  "app": "MEMBRA KPI Vercel Frontend",
+  "apiBase": "",
+  "message": "Set the backend in dashboard with ?api=https://backend-url or paste it into the connection box. This static file avoids Vercel serverless function crashes."
+}
