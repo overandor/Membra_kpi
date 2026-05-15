@@ -2,36 +2,23 @@
 
 This module contains real production-facing application code, not a mock.
 It accepts an iPhone/HEIC-converted/JPEG/PNG/WebP upload, stores the photo,
-runs the existing deterministic MEMBRA assetification engine, writes inventory,
-SKU, KPI, ProofBook, listing draft, optional owner-confirmed public listing,
-payout eligibility, wallet ledger, and QR artifact records.
-
-Wire into app.py with:
-
-    from membra_kpi.iphone_marketplace import register_iphone_marketplace_routes
-    register_iphone_marketplace_routes(
-        app=app,
-        deps={
-            "save_upload": save_upload,
-            "image_meta": image_meta,
-            "new_id": new_id,
-            "now": now,
-            "execute": execute,
-            "one": one,
-            "insert_proof": insert_proof,
-            "app_base_url": APP_BASE_URL,
-        },
-    )
+checks image quality, screens for duplicates, runs SKU identification, runs the
+existing MEMBRA assetification engine, writes inventory, SKU, KPI, ProofBook,
+listing draft, optional owner-confirmed public listing, payout eligibility,
+wallet ledger, and QR artifact records.
 """
 from __future__ import annotations
 
 import json
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any, Callable
 
 from fastapi import File, Form, HTTPException, UploadFile
 
 from .assetification import assetify_from_context
+from .image_quality import analyze_image_file, hamming_distance_hex
+from .image_sku_engine import identify_sku_candidates
 from .marketplace import confirm_visibility, create_listing_draft, request_visibility
 from .proofbook import sha256_payload
 
@@ -61,28 +48,87 @@ def _to_deps(raw: dict[str, Any]) -> IphoneListingDeps:
     )
 
 
-def pick_best_inventory_item(items: list[dict[str, Any]], requested_asset_type: str = "") -> dict[str, Any]:
+def ensure_image_ingestion_table(deps: IphoneListingDeps) -> None:
+    deps.execute(
+        """
+        CREATE TABLE IF NOT EXISTS image_ingestions(
+          ingestion_id TEXT PRIMARY KEY,
+          photo_id TEXT NOT NULL,
+          owner_id TEXT NOT NULL,
+          filename TEXT NOT NULL,
+          file_path TEXT NOT NULL,
+          exact_sha256 TEXT NOT NULL,
+          average_hash TEXT NOT NULL,
+          width INTEGER,
+          height INTEGER,
+          quality_score INTEGER,
+          quality_grade TEXT,
+          duplicate_of_photo_id TEXT,
+          duplicate_distance INTEGER,
+          sku_identification_json TEXT NOT NULL,
+          quality_report_json TEXT NOT NULL,
+          created_at TEXT NOT NULL
+        )
+        """,
+        (),
+    )
+    deps.execute("CREATE INDEX IF NOT EXISTS idx_image_ingestions_owner_sha ON image_ingestions(owner_id, exact_sha256)", ())
+    deps.execute("CREATE INDEX IF NOT EXISTS idx_image_ingestions_owner_hash ON image_ingestions(owner_id, average_hash)", ())
+
+
+def find_duplicate(deps: IphoneListingDeps, *, owner_id: str, exact_sha256: str, average_hash: str) -> dict[str, Any] | None:
+    exact = deps.one(
+        "SELECT * FROM image_ingestions WHERE owner_id=? AND exact_sha256=? ORDER BY created_at DESC LIMIT 1",
+        (owner_id, exact_sha256),
+    )
+    if exact:
+        exact["duplicate_distance"] = 0
+        exact["duplicate_kind"] = "exact_sha256"
+        return exact
+
+    rows_to_check: list[dict[str, Any]] = []
+    for distance in range(0, 9):
+        # SQLite cannot hamming-distance hex strings natively. Pull a recent window and compare in Python.
+        break
+    recent = []
+    # one() returns one row only in the host app, so use a conservative exact-only path unless callers expose rows later.
+    # This structure keeps the DB schema ready for near-duplicate expansion without breaking the current dependency contract.
+    for row in recent:
+        dist = hamming_distance_hex(average_hash, row.get("average_hash", ""))
+        if dist <= 6:
+            row["duplicate_distance"] = dist
+            row["duplicate_kind"] = "average_hash"
+            return row
+    return None
+
+
+def pick_best_inventory_item(items: list[dict[str, Any]], requested_asset_type: str = "", sku_top: dict[str, Any] | None = None) -> dict[str, Any]:
     """Choose one monetizable item from a photo analysis result.
 
-    The engine may detect multiple monetization possibilities from one photo.
-    This selector chooses the highest-confidence/highest-KPI item, optionally
-    biased by requested_asset_type. It is deterministic for auditability.
+    The selector blends assetification confidence with an optional image-SKU
+    classifier result, preserving deterministic behavior for auditability.
     """
     if not items:
         raise HTTPException(422, "No inventory candidates were created from this picture.")
 
     requested = requested_asset_type.strip().lower()
+    sku_asset = (sku_top or {}).get("asset_type", "").lower()
+    sku_family = (sku_top or {}).get("sku_family", "").lower()
 
     def score(item: dict[str, Any]) -> float:
         confidence = float(item.get("confidence") or 0)
         kpi = float(item.get("kpi_score") or 0) / 100
-        bias = 0.0
         haystack = " ".join(
             str(item.get(k, ""))
-            for k in ["asset_type", "detected_name", "listing_type", "monetization_type", "description"]
+            for k in ["asset_type", "detected_name", "listing_type", "monetization_type", "description", "sku"]
         ).lower()
+        bias = 0.0
         if requested and requested in haystack:
-            bias = 0.35
+            bias += 0.35
+        if sku_asset and sku_asset in haystack:
+            bias += 0.30
+        if sku_family and sku_family in haystack:
+            bias += 0.15
         return confidence + kpi + bias
 
     return sorted(items, key=score, reverse=True)[0]
@@ -132,7 +178,6 @@ def _insert_inventory_bundle(deps: IphoneListingDeps, *, photo_id: str, owner_id
 
 
 def _publish_listing(deps: IphoneListingDeps, *, draft: dict[str, Any], owner_id: str) -> dict[str, Any]:
-    """Move one private draft through request->confirm->public marketplace."""
     listing_id = draft["listing_id"]
     requested = request_visibility(draft)
     deps.execute(
@@ -204,6 +249,7 @@ def _create_listing_qr(deps: IphoneListingDeps, *, public_listing: dict[str, Any
 
 def register_iphone_marketplace_routes(app: Any, deps: dict[str, Any]) -> None:
     d = _to_deps(deps)
+    ensure_image_ingestion_table(d)
 
     @app.post("/api/iphone/listing/from-photo")
     async def iphone_photo_to_listing(
@@ -214,19 +260,76 @@ def register_iphone_marketplace_routes(app: Any, deps: dict[str, Any]) -> None:
         user_notes: str = Form(""),
         location_hint: str = Form(""),
         requested_asset_type: str = Form(""),
+        vision_labels_json: str = Form("[]"),
         publish: bool = Form(False),
         owner_confirmed: bool = Form(False),
+        allow_duplicate: bool = Form(False),
+        min_quality_score: int = Form(45),
     ) -> dict[str, Any]:
         """Convert one iPhone picture into MEMBRA listing records.
 
         publish=false: creates private draft only.
         publish=true + owner_confirmed=true: creates public marketplace listing.
+        allow_duplicate=false: exact duplicate uploads by the same owner are blocked.
         """
         filename, path = await d.save_upload(image, "iphone")
         width, height = d.image_meta(path)
         photo_id = d.new_id("photo")
 
-        notes = " ".join(part for part in [user_notes, "iphone upload", requested_asset_type] if part).strip()
+        quality = analyze_image_file(Path(path)).to_dict()
+        if int(quality["listing_quality_score"]) < int(min_quality_score):
+            raise HTTPException(
+                422,
+                {
+                    "error": "image_quality_too_low",
+                    "quality_report": quality,
+                    "message": "Retake or upload a clearer image before generating a marketplace listing.",
+                },
+            )
+
+        duplicate = find_duplicate(
+            d,
+            owner_id=owner_id,
+            exact_sha256=quality["exact_sha256"],
+            average_hash=quality["average_hash"],
+        )
+        if duplicate and not allow_duplicate:
+            raise HTTPException(
+                409,
+                {
+                    "error": "duplicate_image",
+                    "duplicate_photo_id": duplicate.get("photo_id"),
+                    "duplicate_kind": duplicate.get("duplicate_kind", "exact_or_near_duplicate"),
+                    "duplicate_distance": duplicate.get("duplicate_distance"),
+                    "message": "This image appears to have already been ingested for this owner. Set allow_duplicate=true to override.",
+                },
+            )
+
+        try:
+            vision_labels = json.loads(vision_labels_json or "[]")
+            if not isinstance(vision_labels, list):
+                vision_labels = []
+        except json.JSONDecodeError:
+            vision_labels = []
+
+        sku_identification = identify_sku_candidates(
+            filename=filename,
+            width=width,
+            height=height,
+            room_type=room_type,
+            monetization_goal=monetization_goal,
+            user_notes=user_notes,
+            location_hint=location_hint,
+            requested_asset_type=requested_asset_type,
+            vision_labels=[str(x) for x in vision_labels],
+            limit=5,
+        )
+        sku_top = sku_identification["top_candidate"]
+
+        notes = " ".join(
+            part for part in [user_notes, "iphone upload", requested_asset_type, sku_top.get("asset_type", ""), sku_top.get("title", "")]
+            if part
+        ).strip()
         result = assetify_from_context(
             photo_id=photo_id,
             owner_id=owner_id,
@@ -247,12 +350,34 @@ def register_iphone_marketplace_routes(app: Any, deps: dict[str, Any]) -> None:
                 "iphone_analyzed", d.now(),
             ),
         )
+        d.execute(
+            "INSERT INTO image_ingestions VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+            (
+                d.new_id("ingest"), photo_id, owner_id, filename, str(path), quality["exact_sha256"],
+                quality["average_hash"], width, height, quality["listing_quality_score"],
+                quality["quality_grade"], duplicate.get("photo_id") if duplicate else None,
+                duplicate.get("duplicate_distance") if duplicate else None,
+                json.dumps(sku_identification, sort_keys=True), json.dumps(quality, sort_keys=True), d.now(),
+            ),
+        )
+
         drafts = _insert_inventory_bundle(d, photo_id=photo_id, owner_id=owner_id, result=result)
-        best_item = pick_best_inventory_item(result["detected_inventory"], requested_asset_type)
+        best_item = pick_best_inventory_item(result["detected_inventory"], requested_asset_type, sku_top=sku_top)
         best_draft = next((x for x in drafts if x["inventory_item_id"] == best_item["inventory_item_id"]), drafts[0])
 
-        for event in ["iphone_photo_uploaded", "iphone_picture_inventory_mapped", "iphone_listing_draft_created"]:
-            d.insert_proof("photo", photo_id, event, {"owner_id": owner_id, "filename": filename, "best_listing_id": best_draft["listing_id"]})
+        for event in ["iphone_photo_uploaded", "image_quality_scored", "sku_identified", "iphone_picture_inventory_mapped", "iphone_listing_draft_created"]:
+            d.insert_proof(
+                "photo",
+                photo_id,
+                event,
+                {
+                    "owner_id": owner_id,
+                    "filename": filename,
+                    "best_listing_id": best_draft["listing_id"],
+                    "quality_score": quality["listing_quality_score"],
+                    "top_sku": sku_top["sku"],
+                },
+            )
 
         response: dict[str, Any] = {
             "success": True,
@@ -260,16 +385,20 @@ def register_iphone_marketplace_routes(app: Any, deps: dict[str, Any]) -> None:
             "photo_id": photo_id,
             "filename": filename,
             "image_metadata": {"width": width, "height": height, "content_type": image.content_type},
+            "image_quality": quality,
+            "sku_identification": sku_identification,
             "scenario": result["scenario"],
             "room_summary": result["room_summary"],
             "best_inventory_item": best_item,
             "private_listing_draft": best_draft,
             "all_listing_drafts": drafts,
-            "proof_events": ["iphone_photo_uploaded", "iphone_picture_inventory_mapped", "iphone_listing_draft_created"],
+            "proof_events": ["iphone_photo_uploaded", "image_quality_scored", "sku_identified", "iphone_picture_inventory_mapped", "iphone_listing_draft_created"],
             "safety": {
                 "owner_approval_required": True,
                 "earnings_not_guaranteed": True,
                 "external_payment_rails_required": True,
+                "duplicate_screening": True,
+                "image_quality_gate": True,
             },
         }
 
