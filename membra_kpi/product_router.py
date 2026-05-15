@@ -10,6 +10,7 @@ from .deep_backend import BackendContext
 from .free_product_integrations import create_free_product_integration_plan, product_catalog, recommended_stack
 from .huggingface_endpoints import create_hf_bundle_for_listing, create_hf_inference_plan, hf_config_status, hf_model_catalog
 from .info_gauntlets import create_info_gauntlet_service, list_info_bits
+from .inverted_llm import create_inverted_llm_plan, record_inverted_llm_outcome, score_orchestration_outcome, skill_registry
 from .language_fi import language_fi_status, localize_listing_stub
 from .microoverworker import create_microoverworker_product_bundle, microoverworker_status
 from .partner_endpoints import create_partner_endpoint_plan, partner_by_id, partner_catalog
@@ -54,6 +55,21 @@ def build_product_router(db_factory: Callable[[], sqlite3.Connection]) -> APIRou
         with db_factory() as conn:
             return create_hf_bundle_for_listing(conn, context=context(payload), listing=payload.get("listing", {}))
 
+    @router.get("/inverted-llm/skills")
+    def inverted_llm_skills(): return skill_registry()
+    @router.post("/inverted-llm/plan")
+    def inverted_llm_plan(payload: dict[str, Any]):
+        with db_factory() as conn:
+            return create_inverted_llm_plan(conn, context=context(payload), objective=payload["objective"], listing=payload.get("listing", {}), extra_context=payload.get("context", {}))
+    @router.post("/inverted-llm/score")
+    def inverted_llm_score(payload: dict[str, Any]):
+        return score_orchestration_outcome(payload["plan"], payload.get("outcome", {}))
+    @router.post("/inverted-llm/outcome")
+    def inverted_llm_outcome(payload: dict[str, Any]):
+        with db_factory() as conn:
+            event = record_inverted_llm_outcome(conn, context(payload), payload["plan"], payload.get("outcome", {}))
+            return {"success": True, "proofbook_event": event}
+
     @router.get("/data/value-density")
     def data_value_density(): return value_density_report()
     @router.get("/data/high-density")
@@ -70,7 +86,6 @@ def build_product_router(db_factory: Callable[[], sqlite3.Connection]) -> APIRou
     def public_sources_plan(payload: dict[str, Any]):
         with db_factory() as conn:
             return create_public_source_enrichment_plan(conn, context=context(payload), listing=payload.get("listing", {}), bundle_id=payload.get("bundle_id", "all_public_local_underwriting"))
-
     @router.get("/free-products")
     def free_products(): return product_catalog()
     @router.get("/free-products/recommended-stack")
@@ -79,7 +94,6 @@ def build_product_router(db_factory: Callable[[], sqlite3.Connection]) -> APIRou
     def free_products_plan(payload: dict[str, Any]):
         with db_factory() as conn:
             return create_free_product_integration_plan(conn, context=context(payload), listing=payload.get("listing", {}), objective=payload.get("objective", "upgrade MEMBRA backend into a 10x free-tier product stack"))
-
     @router.get("/partners")
     def partners(): return partner_catalog()
     @router.get("/partners/{partner_id}")
@@ -91,14 +105,12 @@ def build_product_router(db_factory: Callable[[], sqlite3.Connection]) -> APIRou
     def partners_plan(payload: dict[str, Any]):
         with db_factory() as conn:
             return create_partner_endpoint_plan(conn, context=context(payload), partner_id=payload["partner_id"], operation=payload["operation"], listing=payload.get("listing", {}), payload=payload.get("payload", {}))
-
     @router.get("/microoverworker/status")
     def microoverworker(): return microoverworker_status()
     @router.post("/microoverworker/bundle")
     def microoverworker_bundle(payload: dict[str, Any]):
         with db_factory() as conn:
             return create_microoverworker_product_bundle(conn, context=context(payload), listing=payload.get("listing", {}), wallet_payloads=payload.get("wallets", []), kpis=payload.get("kpis", []), objective=payload.get("objective"))
-
     @router.get("/language-fi/status")
     def language_fi(): return language_fi_status()
     @router.post("/language-fi/localize")
