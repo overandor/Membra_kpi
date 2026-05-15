@@ -1,0 +1,22 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="page-head"><h1>Admin Review Console</h1><p>Operator decisions are recorded as audit events. Use the ADMIN_TOKEN environment variable for mutation actions.</p></section>
+<div class="grid-2">
+  <div class="card form">
+    <h2>Record decision</h2>
+    <label>Admin token<input id="adminToken" type="password" placeholder="ADMIN_TOKEN"></label>
+    <label>Subject type<input id="subjectType" value="listing"></label>
+    <label>Subject ID<input id="subjectId" placeholder="listing_... or proof_..."></label>
+    <label>Decision<select id="decision"><option>approve</option><option>reject</option><option>needs_more_evidence</option><option>fraud_hold</option><option>payout_hold</option><option>payout_eligible</option><option>archive</option></select></label>
+    <label>Risk level<select id="riskLevel"><option>normal</option><option>medium</option><option>high</option></select></label>
+    <label>Notes<textarea id="adminNotes" rows="4"></textarea></label>
+    <button class="btn primary" onclick="recordAdminDecision()">Record Decision</button>
+    <pre id="adminResult" class="json-box">No decision recorded yet.</pre>
+  </div>
+  <div class="card">
+    <h2>Recent decisions</h2>
+    <div class="table-wrap"><table><tr><th>Subject</th><th>Decision</th><th>Risk</th><th>Created</th></tr>{% for d in decisions %}<tr><td>{{ d.subject_type }} / {{ d.subject_id }}</td><td>{{ d.decision }}</td><td>{{ d.risk_level }}</td><td>{{ d.created_at }}</td></tr>{% endfor %}</table></div>
+  </div>
+</div>
+<section class="grid-2"><div class="card"><h2>Draft queue</h2><div class="table-wrap"><table><tr><th>Listing</th><th>Status</th><th>SKU</th></tr>{% for d in drafts %}<tr><td>{{ d.title }}</td><td>{{ d.status }}</td><td>{{ d.sku }}</td></tr>{% endfor %}</table></div></div><div class="card"><h2>Proof queue</h2><div class="table-wrap"><table><tr><th>Subject</th><th>Event</th><th>Hash</th></tr>{% for p in proofs %}<tr><td>{{ p.subject_type }} / {{ p.subject_id }}</td><td>{{ p.event_type }}</td><td class="hash">{{ p.proof_hash }}</td></tr>{% endfor %}</table></div></div></section>
+{% endblock %}
