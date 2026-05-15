@@ -31,7 +31,7 @@ from membra_kpi.security import apply_security_headers, enforce_rate_limit, vali
 from membra_kpi.solana_devnet import anchor_listing_on_solana_devnet, solana_devnet_status
 
 APP_NAME = "MEMBRA KPI Assetification Marketplace"
-APP_VERSION = "1.4.0"
+APP_VERSION = "1.5.0"
 APP_ENV = os.getenv("APP_ENV", "development")
 APP_BASE_URL = os.getenv("APP_BASE_URL", "http://localhost:8000").rstrip("/")
 DB_PATH = Path(os.getenv("DB_PATH", "./data/membra.db"))
@@ -166,6 +166,55 @@ def emit_domain_event(
     return event
 
 
+def safe_extension(filename: str) -> str:
+    suffix = Path(filename or "upload").suffix.lower()
+    allowed = {".jpg", ".jpeg", ".png", ".webp", ".csv", ".xlsx", ".xls"}
+    return suffix if suffix in allowed else ""
+
+
+async def save_upload(file: UploadFile, prefix: str, *, kind: str) -> tuple[str, Path]:
+    data = await file.read()
+    if kind == "image":
+        validate_image_upload(file.filename or "", file.content_type, data)
+    elif kind == "data":
+        validate_data_upload(file.filename or "", data)
+    else:
+        raise HTTPException(400, "Unknown upload kind")
+    filename = f"{prefix}_{uuid.uuid4().hex}{safe_extension(file.filename or '')}"
+    path = UPLOAD_DIR / filename
+    path.write_bytes(data)
+    return filename, path
+
+
+def image_meta(path: Path) -> tuple[int, int]:
+    try:
+        with Image.open(path) as img:
+            return img.size
+    except Exception:
+        return 0, 0
+
+
+def summarize_dataframe(df: pd.DataFrame) -> dict[str, Any]:
+    numeric = df.select_dtypes(include="number")
+    categorical = df.select_dtypes(exclude="number")
+    summary = {
+        "row_count": int(len(df)),
+        "column_count": int(len(df.columns)),
+        "columns": list(map(str, df.columns)),
+        "missing_values": {str(k): int(v) for k, v in df.isna().sum().to_dict().items()},
+        "numeric_stats": json.loads(numeric.describe().fillna(0).to_json()) if not numeric.empty else {},
+        "categorical_profile": {str(col): df[col].astype(str).value_counts().head(10).to_dict() for col in categorical.columns[:12]},
+    }
+    suggested = [
+        "revenue trend" if any("revenue" in str(c).lower() or "sales" in str(c).lower() for c in df.columns) else "activity volume",
+        "utilization rate",
+        "top category mix",
+        "missing data risk",
+        "proof/readiness score",
+    ]
+    return {"summary": summary, "suggested_kpis": suggested}
+
+
 def require_admin(token: str | None) -> None:
     if not verify_admin_token(token, plain_token=ADMIN_TOKEN, token_hash=ADMIN_TOKEN_SHA256 or None):
         raise HTTPException(status_code=401, detail="Valid admin token required")
@@ -229,6 +278,162 @@ def api_deep_backend_status():
 @app.get("/api/solana/devnet/status")
 def api_solana_status():
     return solana_devnet_status()
+
+
+@app.get("/api/photos")
+def api_photos():
+    return {"photos": rows("SELECT * FROM photos ORDER BY created_at DESC")}
+
+
+@app.get("/api/inventory")
+def api_inventory():
+    return {"inventory": rows("SELECT * FROM inventory_items ORDER BY created_at DESC")}
+
+
+@app.get("/api/sku-map")
+def api_sku_map():
+    return {"sku_map": rows("SELECT * FROM sku_map ORDER BY created_at DESC")}
+
+
+@app.get("/api/kpis")
+def api_kpis():
+    return {"kpis": rows("SELECT * FROM kpi_cards ORDER BY created_at DESC"), "uploads": rows("SELECT * FROM kpi_uploads ORDER BY created_at DESC")}
+
+
+@app.post("/api/photo/analyze")
+async def analyze_photo(
+    image: UploadFile = File(...),
+    owner_id: str = Form("owner_default"),
+    room_type: str = Form(""),
+    monetization_goal: str = Form(""),
+    user_notes: str = Form(""),
+    location_hint: str = Form(""),
+):
+    filename, path = await save_upload(image, "photo", kind="image")
+    width, height = image_meta(path)
+    photo_id = new_id("photo")
+    result = assetify_from_context(
+        photo_id=photo_id,
+        owner_id=owner_id,
+        room_type=room_type,
+        monetization_goal=monetization_goal,
+        user_notes=user_notes,
+        location_hint=location_hint,
+        filename=filename,
+        width=width,
+        height=height,
+    )
+    execute(
+        "INSERT INTO photos VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+        (photo_id, owner_id, filename, str(path), image.content_type or "", width, height, room_type, monetization_goal, user_notes, location_hint, result["room_summary"], "analyzed", now()),
+    )
+    created_drafts: list[dict[str, Any]] = []
+    for item in result["detected_inventory"]:
+        execute(
+            "INSERT INTO inventory_items VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+            (item["inventory_item_id"], photo_id, owner_id, item["sku"], item["detected_name"], item["asset_type"], item["visual_evidence"], item["monetization_type"], item["listing_type"], item["description"], item["suggested_price_low"], item["suggested_price_high"], item["pricing_unit"], item["confidence"], item["kpi_score"], json.dumps(item["proof_required"], default=str), json.dumps(item["risk_flags"], default=str), item["recommended_action"], item["status"], now()),
+        )
+        category = item["sku"].split("-")[1]
+        execute("INSERT INTO sku_map VALUES(?,?,?,?,?,?)", (item["sku"], item["inventory_item_id"], category, item["detected_name"], "active", now()))
+        draft = create_listing_draft(item).to_dict()
+        created_drafts.append(draft)
+        execute(
+            "INSERT INTO listing_drafts VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)",
+            (draft["listing_id"], draft["inventory_item_id"], draft["sku"], draft["title"], draft["description"], draft["listing_type"], draft["suggested_price_low"], draft["suggested_price_high"], draft["pricing_unit"], draft["status"], draft["owner_visibility_requested_at"], draft["owner_confirmed_at"], draft["created_at"]),
+        )
+    for card in result["kpi_cards"]:
+        execute(
+            "INSERT INTO kpi_cards VALUES(?,?,?,?,?,?,?,?,?)",
+            (new_id("kpi"), card.get("source_photo_id"), card.get("inventory_item_id"), card["title"], card["value"], int(card["score"]), card["category"], card["explanation"], now()),
+        )
+    proof_events: list[dict[str, Any]] = []
+    for event_type in ["photo_analyzed", "picture_inventory_mapped", "inventory_items_created", "sku_map_created", "listing_drafts_created", "kpis_generated"]:
+        proof_events.append(insert_proof("photo", photo_id, event_type, {"owner_id": owner_id, "filename": filename, "inventory_count": len(result["detected_inventory"]), "draft_count": len(created_drafts)}))
+    photo_event = emit_domain_event(
+        "photo_analyzed",
+        subject_type="photo",
+        subject_id=photo_id,
+        owner_id=owner_id,
+        payload={"photo_id": photo_id, "filename": filename, "width": width, "height": height, "room_type": room_type, "monetization_goal": monetization_goal, "room_summary": result["room_summary"]},
+        consent_scope="uploaded photo metadata, owner context, and derived proof/inventory records only",
+        risk_level="normal",
+    )
+    inventory_event = emit_domain_event(
+        "inventory_items_created",
+        subject_type="photo",
+        subject_id=photo_id,
+        owner_id=owner_id,
+        payload={"inventory": result["detected_inventory"], "inventory_count": len(result["detected_inventory"])},
+        consent_scope="derived inventory and listing-readiness metadata only",
+        risk_level="normal",
+        correlation_id=photo_event["event_id"],
+    )
+    sku_event = emit_domain_event(
+        "sku_map_created",
+        subject_type="photo",
+        subject_id=photo_id,
+        owner_id=owner_id,
+        payload={"skus": [item["sku"] for item in result["detected_inventory"]]},
+        consent_scope="SKU identifiers and derived asset categories only",
+        risk_level="normal",
+        correlation_id=photo_event["event_id"],
+        causation_id=inventory_event["event_id"],
+    )
+    draft_event = emit_domain_event(
+        "listing_drafts_created",
+        subject_type="photo",
+        subject_id=photo_id,
+        owner_id=owner_id,
+        payload={"drafts": created_drafts, "draft_count": len(created_drafts)},
+        consent_scope="private draft metadata only; no public visibility without owner confirmation",
+        risk_level="medium",
+        correlation_id=photo_event["event_id"],
+        causation_id=sku_event["event_id"],
+    )
+    kpi_event = emit_domain_event(
+        "kpis_generated",
+        subject_type="photo",
+        subject_id=photo_id,
+        owner_id=owner_id,
+        payload={"kpi_count": len(result["kpi_cards"]), "proofs": proof_events},
+        consent_scope="derived KPI summaries and proof hashes only",
+        risk_level="normal",
+        correlation_id=photo_event["event_id"],
+        causation_id=draft_event["event_id"],
+    )
+    result["listing_drafts"] = created_drafts
+    result["proofbook_entries_created"] = len(proof_events)
+    result["events"] = [photo_event, inventory_event, sku_event, draft_event, kpi_event]
+    return result
+
+
+@app.post("/api/kpi/upload")
+async def upload_kpi(file: UploadFile = File(...), owner_id: str = Form("owner_default")):
+    filename, path = await save_upload(file, "dataset", kind="data")
+    suffix = Path(filename).suffix.lower()
+    if suffix == ".csv":
+        df = pd.read_csv(path)
+    elif suffix in {".xlsx", ".xls"}:
+        df = pd.read_excel(path)
+    else:
+        raise HTTPException(400, "Upload CSV or XLSX")
+    report = summarize_dataframe(df)
+    upload_id = new_id("upload")
+    execute(
+        "INSERT INTO kpi_uploads VALUES(?,?,?,?,?,?,?)",
+        (upload_id, filename, report["summary"]["row_count"], report["summary"]["column_count"], json.dumps(report["summary"], default=str), json.dumps(report["suggested_kpis"], default=str), now()),
+    )
+    proof = insert_proof("kpi_upload", upload_id, "kpis_generated", {"owner_id": owner_id, "filename": filename, "rows": report["summary"]["row_count"], "columns": report["summary"]["column_count"]})
+    event = emit_domain_event(
+        "kpis_generated",
+        subject_type="kpi_upload",
+        subject_id=upload_id,
+        owner_id=owner_id,
+        payload={"filename": filename, "summary": report["summary"], "suggested_kpis": report["suggested_kpis"], "proof": proof},
+        consent_scope="dataset profile, column summary, derived KPI metadata, and proof hash only",
+        risk_level="normal",
+    )
+    return {"success": True, "upload_id": upload_id, "event": event, **report}
 
 
 @app.post("/api/listings/{listing_id}/anchor-devnet")
