@@ -5,7 +5,7 @@ It accepts an iPhone/HEIC-converted/JPEG/PNG/WebP upload, stores the photo,
 checks image quality, screens for duplicates, runs SKU identification, runs the
 existing MEMBRA assetification engine, writes inventory, SKU, KPI, ProofBook,
 listing draft, optional owner-confirmed public listing, payout eligibility,
-wallet ledger, and QR artifact records.
+wallet ledger, QR artifact records, and MEMBRA proprietary commercial packets.
 """
 from __future__ import annotations
 
@@ -21,6 +21,7 @@ from .image_quality import analyze_image_file, hamming_distance_hex
 from .image_sku_engine import identify_sku_candidates
 from .marketplace import confirm_visibility, create_listing_draft, request_visibility
 from .proofbook import sha256_payload
+from .proprietary_listing_os import generate_listing_packet, summarize_packet_for_operator
 
 
 @dataclass(frozen=True)
@@ -74,6 +75,34 @@ def ensure_image_ingestion_table(deps: IphoneListingDeps) -> None:
     )
     deps.execute("CREATE INDEX IF NOT EXISTS idx_image_ingestions_owner_sha ON image_ingestions(owner_id, exact_sha256)", ())
     deps.execute("CREATE INDEX IF NOT EXISTS idx_image_ingestions_owner_hash ON image_ingestions(owner_id, average_hash)", ())
+    deps.execute(
+        """
+        CREATE TABLE IF NOT EXISTS proprietary_listing_packets(
+          packet_id TEXT PRIMARY KEY,
+          listing_id TEXT NOT NULL,
+          inventory_item_id TEXT NOT NULL,
+          photo_id TEXT NOT NULL,
+          owner_id TEXT NOT NULL,
+          sku TEXT NOT NULL,
+          proprietary_asset_class TEXT NOT NULL,
+          proof_score INTEGER NOT NULL,
+          liquidity_score INTEGER NOT NULL,
+          compliance_score INTEGER NOT NULL,
+          operator_score INTEGER NOT NULL,
+          valuation_score INTEGER NOT NULL,
+          risk_tier TEXT NOT NULL,
+          review_actions_json TEXT NOT NULL,
+          missing_proof_json TEXT NOT NULL,
+          packet_hash TEXT NOT NULL,
+          packet_json TEXT NOT NULL,
+          operator_summary_json TEXT NOT NULL,
+          created_at TEXT NOT NULL
+        )
+        """,
+        (),
+    )
+    deps.execute("CREATE INDEX IF NOT EXISTS idx_packets_owner_score ON proprietary_listing_packets(owner_id, valuation_score)", ())
+    deps.execute("CREATE INDEX IF NOT EXISTS idx_packets_listing ON proprietary_listing_packets(listing_id)", ())
 
 
 def find_duplicate(deps: IphoneListingDeps, *, owner_id: str, exact_sha256: str, average_hash: str) -> dict[str, Any] | None:
@@ -86,13 +115,9 @@ def find_duplicate(deps: IphoneListingDeps, *, owner_id: str, exact_sha256: str,
         exact["duplicate_kind"] = "exact_sha256"
         return exact
 
-    rows_to_check: list[dict[str, Any]] = []
-    for distance in range(0, 9):
-        # SQLite cannot hamming-distance hex strings natively. Pull a recent window and compare in Python.
-        break
-    recent = []
-    # one() returns one row only in the host app, so use a conservative exact-only path unless callers expose rows later.
-    # This structure keeps the DB schema ready for near-duplicate expansion without breaking the current dependency contract.
+    recent: list[dict[str, Any]] = []
+    # The host app currently exposes one(), not rows(), through this module dependency.
+    # Exact matching is enforced now; near-duplicate expansion is schema-ready and can be enabled once rows() is injected.
     for row in recent:
         dist = hamming_distance_hex(average_hash, row.get("average_hash", ""))
         if dist <= 6:
@@ -103,11 +128,6 @@ def find_duplicate(deps: IphoneListingDeps, *, owner_id: str, exact_sha256: str,
 
 
 def pick_best_inventory_item(items: list[dict[str, Any]], requested_asset_type: str = "", sku_top: dict[str, Any] | None = None) -> dict[str, Any]:
-    """Choose one monetizable item from a photo analysis result.
-
-    The selector blends assetification confidence with an optional image-SKU
-    classifier result, preserving deterministic behavior for auditability.
-    """
     if not items:
         raise HTTPException(422, "No inventory candidates were created from this picture.")
 
@@ -175,6 +195,27 @@ def _insert_inventory_bundle(deps: IphoneListingDeps, *, photo_id: str, owner_id
             ),
         )
     return drafts
+
+
+def _persist_listing_packet(
+    deps: IphoneListingDeps,
+    *,
+    packet: Any,
+    operator_summary: dict[str, Any],
+    photo_id: str,
+    owner_id: str,
+) -> None:
+    data = packet.to_dict()
+    deps.execute(
+        "INSERT OR REPLACE INTO proprietary_listing_packets VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+        (
+            data["packet_id"], data["listing_id"], data["inventory_item_id"], photo_id, owner_id,
+            data["sku"], data["proprietary_asset_class"], data["proof_score"], data["liquidity_score"],
+            data["compliance_score"], data["operator_score"], data["valuation_score"], data["risk_tier"],
+            json.dumps(data["review_actions"], sort_keys=True), json.dumps(data["missing_proof"], sort_keys=True),
+            data["packet_hash"], json.dumps(data, sort_keys=True), json.dumps(operator_summary, sort_keys=True), deps.now(),
+        ),
+    )
 
 
 def _publish_listing(deps: IphoneListingDeps, *, draft: dict[str, Any], owner_id: str) -> dict[str, Any]:
@@ -260,18 +301,13 @@ def register_iphone_marketplace_routes(app: Any, deps: dict[str, Any]) -> None:
         user_notes: str = Form(""),
         location_hint: str = Form(""),
         requested_asset_type: str = Form(""),
+        owner_fields_json: str = Form("{}"),
         vision_labels_json: str = Form("[]"),
         publish: bool = Form(False),
         owner_confirmed: bool = Form(False),
         allow_duplicate: bool = Form(False),
         min_quality_score: int = Form(45),
     ) -> dict[str, Any]:
-        """Convert one iPhone picture into MEMBRA listing records.
-
-        publish=false: creates private draft only.
-        publish=true + owner_confirmed=true: creates public marketplace listing.
-        allow_duplicate=false: exact duplicate uploads by the same owner are blocked.
-        """
         filename, path = await d.save_upload(image, "iphone")
         width, height = d.image_meta(path)
         photo_id = d.new_id("photo")
@@ -311,6 +347,13 @@ def register_iphone_marketplace_routes(app: Any, deps: dict[str, Any]) -> None:
                 vision_labels = []
         except json.JSONDecodeError:
             vision_labels = []
+
+        try:
+            owner_fields = json.loads(owner_fields_json or "{}")
+            if not isinstance(owner_fields, dict):
+                owner_fields = {}
+        except json.JSONDecodeError:
+            owner_fields = {}
 
         sku_identification = identify_sku_candidates(
             filename=filename,
@@ -365,7 +408,25 @@ def register_iphone_marketplace_routes(app: Any, deps: dict[str, Any]) -> None:
         best_item = pick_best_inventory_item(result["detected_inventory"], requested_asset_type, sku_top=sku_top)
         best_draft = next((x for x in drafts if x["inventory_item_id"] == best_item["inventory_item_id"]), drafts[0])
 
-        for event in ["iphone_photo_uploaded", "image_quality_scored", "sku_identified", "iphone_picture_inventory_mapped", "iphone_listing_draft_created"]:
+        listing_packet = generate_listing_packet(
+            inventory_item=best_item,
+            listing_draft=best_draft,
+            sku_identification=sku_top,
+            image_quality=quality,
+            owner_fields=owner_fields,
+            location_hint=location_hint,
+        )
+        operator_summary = summarize_packet_for_operator(listing_packet)
+        _persist_listing_packet(d, packet=listing_packet, operator_summary=operator_summary, photo_id=photo_id, owner_id=owner_id)
+
+        for event in [
+            "iphone_photo_uploaded",
+            "image_quality_scored",
+            "sku_identified",
+            "iphone_picture_inventory_mapped",
+            "iphone_listing_draft_created",
+            "proprietary_listing_packet_generated",
+        ]:
             d.insert_proof(
                 "photo",
                 photo_id,
@@ -376,6 +437,9 @@ def register_iphone_marketplace_routes(app: Any, deps: dict[str, Any]) -> None:
                     "best_listing_id": best_draft["listing_id"],
                     "quality_score": quality["listing_quality_score"],
                     "top_sku": sku_top["sku"],
+                    "packet_id": listing_packet.packet_id,
+                    "valuation_score": listing_packet.valuation_score,
+                    "risk_tier": listing_packet.risk_tier,
                 },
             )
 
@@ -387,18 +451,29 @@ def register_iphone_marketplace_routes(app: Any, deps: dict[str, Any]) -> None:
             "image_metadata": {"width": width, "height": height, "content_type": image.content_type},
             "image_quality": quality,
             "sku_identification": sku_identification,
+            "proprietary_listing_packet": listing_packet.to_dict(),
+            "operator_summary": operator_summary,
             "scenario": result["scenario"],
             "room_summary": result["room_summary"],
             "best_inventory_item": best_item,
             "private_listing_draft": best_draft,
             "all_listing_drafts": drafts,
-            "proof_events": ["iphone_photo_uploaded", "image_quality_scored", "sku_identified", "iphone_picture_inventory_mapped", "iphone_listing_draft_created"],
+            "proof_events": [
+                "iphone_photo_uploaded",
+                "image_quality_scored",
+                "sku_identified",
+                "iphone_picture_inventory_mapped",
+                "iphone_listing_draft_created",
+                "proprietary_listing_packet_generated",
+            ],
             "safety": {
                 "owner_approval_required": True,
                 "earnings_not_guaranteed": True,
                 "external_payment_rails_required": True,
                 "duplicate_screening": True,
                 "image_quality_gate": True,
+                "operator_review_routing": True,
+                "proprietary_packet_hash": listing_packet.packet_hash,
             },
         }
 
@@ -407,6 +482,9 @@ def register_iphone_marketplace_routes(app: Any, deps: dict[str, Any]) -> None:
             return response
 
         if publish and owner_confirmed:
+            if "block_publication" in listing_packet.review_actions:
+                response["publish_blocked_reason"] = "MEMBRA proprietary packet blocks publication until required proof/compliance fields are resolved."
+                return response
             published = _publish_listing(d, draft=best_draft, owner_id=owner_id)
             qr = _create_listing_qr(d, public_listing=published["public_listing"])
             response.update(published)
