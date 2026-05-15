@@ -31,6 +31,13 @@ def test_product_router_mounts():
     info_bits = client.get("/api/product/info-bits")
     assert info_bits.status_code == 200
 
+    hf_status = client.get("/api/product/huggingface/status")
+    assert hf_status.status_code == 200
+
+    hf_models = client.get("/api/product/huggingface/models")
+    assert hf_models.status_code == 200
+    assert "models" in hf_models.json()
+
 
 
 def test_info_gauntlet_creation():
@@ -56,3 +63,30 @@ def test_info_gauntlet_creation():
     body = response.json()
     assert body["success"] is True
     assert "info_gauntlet" in body
+
+
+
+def test_huggingface_listing_bundle_creation():
+    app = FastAPI()
+    app.include_router(build_product_router(make_conn))
+
+    client = TestClient(app)
+
+    response = client.post(
+        "/api/product/huggingface/listing-bundle",
+        json={
+            "tenant_id": "tenant_hf",
+            "actor_id": "hf_tester",
+            "listing": {
+                "listing_id": "lst_hf_1",
+                "title": "Storefront activation zone",
+                "description": "Retail storefront with visible glass frontage.",
+            },
+        },
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["success"] is True
+    assert "huggingface_bundle" in body
+    assert len(body["huggingface_bundle"]["plans"]) >= 3
