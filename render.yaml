@@ -1,10 +1,22 @@
 services:
   - type: web
-    name: membra-kpi
-    env: docker
+    name: membra-kpi-api
+    runtime: python
     plan: starter
     autoDeploy: true
     healthCheckPath: /api/health
+    buildCommand: |
+      python -m pip install --upgrade pip
+      if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+      python -m py_compile app.py
+    startCommand: |
+      uvicorn app:app --host 0.0.0.0 --port $PORT
     envVars:
       - key: PORT
         value: 8000
+      - key: APP_ENV
+        value: render
+      - key: PYTHON_VERSION
+        value: 3.11
+      - key: HF_TIMEOUT_SECONDS
+        value: 45
