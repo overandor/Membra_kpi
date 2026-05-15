@@ -8,6 +8,7 @@ from fastapi import APIRouter, Header, HTTPException
 
 from .deep_backend import BackendContext
 from .free_product_integrations import create_free_product_integration_plan, product_catalog, recommended_stack
+from .golden_prime_decision import create_golden_prime_decision, workflow_step_schedule
 from .huggingface_endpoints import create_hf_bundle_for_listing, create_hf_inference_plan, hf_config_status, hf_model_catalog
 from .info_gauntlets import create_info_gauntlet_service, list_info_bits
 from .inverted_llm import create_inverted_llm_plan, record_inverted_llm_outcome, score_orchestration_outcome, skill_registry
@@ -31,6 +32,22 @@ def build_product_router(db_factory: Callable[[], sqlite3.Connection]) -> APIRou
             actor_id=str(payload.get("actor_id", "product-api")),
             role=str(payload.get("role", "system")),
         )
+
+    @router.get("/golden-prime/workflow")
+    def golden_prime_workflow(step_count: int = 8):
+        return {
+            "system": "MEMBRA golden-prime workflow scheduler",
+            "schedule": workflow_step_schedule(step_count),
+        }
+
+    @router.post("/golden-prime/rank")
+    def golden_prime_rank(payload: dict[str, Any]):
+        with db_factory() as conn:
+            return create_golden_prime_decision(
+                conn,
+                context=context(payload),
+                candidates=payload.get("candidates", []),
+            )
 
     @router.get("/providers")
     def providers(): return get_all_provider_status()
