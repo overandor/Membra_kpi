@@ -36,6 +36,15 @@ function pretty(obj) {
   return JSON.stringify(obj, null, 2);
 }
 
+function escapeHtml(value) {
+  return String(value ?? '')
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;')
+    .replaceAll("'", '&#039;');
+}
+
 async function fetchJson(path, options = {}) {
   const api = configuredApiBase();
   if (!api) throw new Error('Backend API is not configured. Set it in the dashboard connection box.');
@@ -71,14 +80,30 @@ function setHtml(id, value) {
 }
 
 function statusBadge(ok, label) {
-  if (ok === true) return `<span class="status online">● ${label || 'online'}</span>`;
-  if (ok === false) return `<span class="status offline">● ${label || 'offline'}</span>`;
-  return `<span class="status warn">● ${label || 'not connected'}</span>`;
+  if (ok === true) return `<span class="status online">● ${escapeHtml(label || 'online')}</span>`;
+  if (ok === false) return `<span class="status offline">● ${escapeHtml(label || 'offline')}</span>`;
+  return `<span class="status warn">● ${escapeHtml(label || 'not connected')}</span>`;
+}
+
+function emptyState(title, detail) {
+  return `<div class="empty"><strong>${escapeHtml(title)}</strong><br><span>${escapeHtml(detail)}</span></div>`;
+}
+
+function loadingSkeleton(label = 'Loading live backend data') {
+  return `<div class="skeleton" aria-label="${escapeHtml(label)}"></div>`;
 }
 
 async function connectDashboard() {
   const input = qs('apiBaseInput');
   if (input) setApiBase(input.value);
+  await loadDashboard();
+}
+
+async function clearConnection() {
+  localStorage.removeItem('MEMBRA_API_BASE');
+  window.MEMBRA_API_BASE = '';
+  const input = qs('apiBaseInput');
+  if (input) input.value = '';
   await loadDashboard();
 }
 
@@ -88,11 +113,17 @@ async function loadDashboard() {
   if (input && api) input.value = api;
   setText('apiBaseText', api || 'Not configured');
   setHtml('connectionStatus', statusBadge(null, 'checking'));
+  setHtml('dashboardStats', Array.from({ length: 8 }).map(() => loadingSkeleton()).join(''));
+  setHtml('listingsTable', loadingSkeleton('Loading listings'));
+  setHtml('proofbookTable', loadingSkeleton('Loading ProofBook'));
 
   if (!api) {
     setHtml('connectionStatus', statusBadge(false, 'backend not configured'));
     setText('healthJson', pretty({ message: 'Set MEMBRA_API_BASE in Vercel env or use ?api=https://your-backend.example.com' }));
     renderCounts({});
+    setHtml('listingsTable', emptyState('Backend disconnected', 'Connect a FastAPI backend to show owner-confirmed marketplace records.'));
+    setHtml('proofbookTable', emptyState('Backend disconnected', 'Connect a backend to show ProofBook records.'));
+    setText('outboxJson', pretty({ status: 'backend_disconnected' }));
     return;
   }
 
@@ -117,13 +148,25 @@ async function loadDashboard() {
     setHtml('connectionStatus', statusBadge(false, 'backend unreachable'));
     setText('healthJson', pretty({ error: err.message, apiBase: api }));
     renderCounts({});
+    setHtml('listingsTable', emptyState('Backend unreachable', 'The dashboard could not load marketplace listings from the configured backend.'));
+    setHtml('proofbookTable', emptyState('Backend unreachable', 'The dashboard could not load ProofBook records from the configured backend.'));
+    setText('outboxJson', pretty({ error: err.message }));
   }
 }
 
 function renderCounts(counts) {
-  const defaults = ['photos','inventory','drafts','public_listings','kpis','proofs','event_outbox_pending','event_outbox_delivered'];
-  setHtml('dashboardStats', defaults.map(key => `
-    <div class="card stat"><span>${key.replaceAll('_',' ')}</span><b>${counts[key] ?? '—'}</b></div>
+  const labels = [
+    ['photos', 'Photo proofs'],
+    ['inventory', 'Inventory items'],
+    ['drafts', 'Private drafts'],
+    ['public_listings', 'Live listings'],
+    ['kpis', 'KPI cards'],
+    ['proofs', 'ProofBook rows'],
+    ['event_outbox_pending', 'Outbox pending'],
+    ['event_outbox_delivered', 'Outbox delivered']
+  ];
+  setHtml('dashboardStats', labels.map(([key, label]) => `
+    <div class="card stat"><span>${escapeHtml(label)}</span><b>${counts[key] ?? '—'}</b></div>
   `).join(''));
 }
 
@@ -131,11 +174,11 @@ async function loadListings() {
   const data = await fetchJson('/api/listings/public');
   const listings = data.public_listings || [];
   if (!listings.length) {
-    setHtml('listingsTable', '<div class="muted">No owner-confirmed listings returned by backend.</div>');
+    setHtml('listingsTable', emptyState('No public listings yet', 'Owner-confirmed listings will appear here after visibility confirmation.'));
     return;
   }
   setHtml('listingsTable', `<div class="table-wrap"><table><thead><tr><th>SKU</th><th>Title</th><th>Price</th><th>Status</th></tr></thead><tbody>${listings.map(l => `
-    <tr><td>${l.sku || ''}</td><td>${l.title || ''}</td><td>${money(l.price_low)}–${money(l.price_high)} / ${l.pricing_unit || ''}</td><td>${l.visibility_status || ''}</td></tr>
+    <tr><td>${escapeHtml(l.sku || '')}</td><td>${escapeHtml(l.title || '')}</td><td>${escapeHtml(money(l.price_low))}–${escapeHtml(money(l.price_high))} / ${escapeHtml(l.pricing_unit || '')}</td><td>${escapeHtml(l.visibility_status || '')}</td></tr>
   `).join('')}</tbody></table></div>`);
 }
 
@@ -143,11 +186,11 @@ async function loadProofbook() {
   const data = await fetchJson('/api/proofbook');
   const proofs = data.proofbook || [];
   if (!proofs.length) {
-    setHtml('proofbookTable', '<div class="muted">No ProofBook records returned by backend.</div>');
+    setHtml('proofbookTable', emptyState('No ProofBook records yet', 'Proof hashes will appear after photo analysis, KPI upload, visibility events, or outbox replay.'));
     return;
   }
   setHtml('proofbookTable', `<div class="table-wrap"><table><thead><tr><th>Event</th><th>Subject</th><th>Hash</th><th>Created</th></tr></thead><tbody>${proofs.slice(0, 12).map(p => `
-    <tr><td>${p.event_type || ''}</td><td>${p.subject_type || ''} / ${p.subject_id || ''}</td><td><small>${p.proof_hash || ''}</small></td><td>${p.created_at || ''}</td></tr>
+    <tr><td>${escapeHtml(p.event_type || '')}</td><td>${escapeHtml(p.subject_type || '')} / ${escapeHtml(p.subject_id || '')}</td><td><small>${escapeHtml(p.proof_hash || '')}</small></td><td>${escapeHtml(p.created_at || '')}</td></tr>
   `).join('')}</tbody></table></div>`);
 }
 
@@ -160,7 +203,7 @@ async function submitPhotoForm(event) {
   event.preventDefault();
   const form = event.target;
   const result = qs('photoResult');
-  if (result) result.textContent = 'Uploading and analyzing...';
+  if (result) result.textContent = 'Uploading and analyzing real image proof...';
   try {
     const data = await fetchForm('/api/photo/analyze', new FormData(form));
     if (result) result.textContent = pretty(data);
