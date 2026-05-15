@@ -24,6 +24,8 @@ PROOF_EVENTS = {
     "qr_artifact_created",
     "scan_recorded",
     "payout_eligibility_created",
+    "proof_reviewed",
+    "admin_decision_recorded",
 }
 
 
