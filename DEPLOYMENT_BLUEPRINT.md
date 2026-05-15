@@ -15,6 +15,7 @@ Upload a picture of a room, closet, couch, tool, car, shelf, pantry, storage are
 ```text
 Photo upload
 → AI/fallback inventory analysis
+→ picture-to-inventory mapping
 → SKU map
 → inventory records
 → monetization suggestions
@@ -30,6 +31,161 @@ Photo upload
 AI may draft. The user approves before any listing becomes visible.
 
 No external buyer contact, payment request, social posting, email, SMS, or settlement action is allowed from this app.
+
+## Picture-to-inventory mapping
+
+The core product mechanic is **picture-to-inventory mapping**.
+
+A user uploads a picture. MEMBRA must turn the visual contents into structured inventory records that can be priced, scored, listed, verified, and later approved for marketplace visibility.
+
+The system must not merely caption the image. It must produce normalized inventory objects.
+
+### Required mapping pipeline
+
+```text
+uploaded_picture
+→ image metadata extraction
+→ visual context analysis
+→ detected object candidates
+→ monetizable asset interpretation
+→ SKU assignment
+→ inventory record creation
+→ listing draft creation
+→ KPI scoring
+→ proof requirement generation
+→ ProofBook hash record
+```
+
+### Input fields
+
+`POST /api/photo/analyze` must accept:
+
+```text
+image: required file
+owner_id: optional
+room_type: optional
+monetization_goal: optional
+user_notes: optional
+location_hint: optional
+```
+
+### Required output shape
+
+```json
+{
+  "success": true,
+  "photo_id": "photo_...",
+  "room_summary": "",
+  "inventory_items_created": 0,
+  "sku_records_created": 0,
+  "listing_drafts_created": 0,
+  "kpi_cards_created": 0,
+  "proofbook_entries_created": 0,
+  "detected_inventory": [
+    {
+      "sku": "MEMBRA-STORAGE-19AC",
+      "source_photo_id": "photo_...",
+      "detected_name": "Closet shelf storage",
+      "asset_type": "storage_space",
+      "visual_evidence": "visible shelf, bin, closet, or storage area",
+      "monetization_type": "store",
+      "listing_type": "storage shelf rental",
+      "suggested_price_low": 12,
+      "suggested_price_high": 35,
+      "pricing_unit": "monthly",
+      "confidence": 0.82,
+      "kpi_score": 78,
+      "proof_required": ["clear shelf photo", "access rules", "owner confirmation"],
+      "risk_flags": ["liability review recommended"],
+      "recommended_action": "Measure shelf dimensions and create draft listing.",
+      "status": "draft"
+    }
+  ]
+}
+```
+
+### Mapping fields per inventory item
+
+Every mapped inventory item must include:
+
+- `sku`
+- `source_photo_id`
+- `inventory_item_id`
+- `detected_name`
+- `asset_type`
+- `visual_evidence`
+- `monetization_type`
+- `listing_type`
+- `description`
+- `suggested_price_low`
+- `suggested_price_high`
+- `pricing_unit`
+- `confidence`
+- `kpi_score`
+- `proof_required`
+- `risk_flags`
+- `recommended_action`
+- `status`
+
+### Monetization interpretation table
+
+| Visual signal | Inventory interpretation | Monetization type | Listing type | SKU category |
+|---|---|---|---|---|
+| Couch, chair, seating | Temporary seating or workspace access | rent/access | couch seat rental | SEAT |
+| Desk, monitor, lamp | Workspace or creator station | rent/access | workspace access | WORK |
+| Closet, shelf, bins | Storage capacity | store/rent | closet or shelf storage | STORAGE |
+| Tool, drill, vacuum | Borrowable local tool | lend/rent | tool rental | TOOL |
+| Window, glass door | Physical ad surface | advertise | window ad surface | WINDOW |
+| Car rear/side surface | Mobile local ad surface | advertise | car ad space | CARAD |
+| Hoodie, shirt, backpack | Wearable media | advertise | wearable ad space | WEAR |
+| Boxes, bags, entryway | Package handoff point | relay | local handoff point | RELAY |
+| Pantry, consumables | Surplus household supply | sell/bundle | pantry surplus | PANTRY |
+| Clothing pile | Resale or donation bundle | sell/bundle | clothing resale bundle | RESALE |
+| Empty parking or driveway | Vehicle storage/access | rent | parking space | PARKING |
+| Wall, poster area | QR/poster campaign surface | advertise | wall QR surface | WALLAD |
+
+### Fallback mapping rule
+
+If Groq or image analysis fails, the app must still create useful picture-to-inventory mappings from:
+
+- `room_type`
+- `monetization_goal`
+- `user_notes`
+- uploaded filename
+- image dimensions
+
+Fallback must create at least:
+
+- 5 inventory items
+- 5 SKU records
+- 5 listing drafts
+- 10 KPI cards
+- 4 ProofBook entries
+
+### Example fallback for cluttered room, closet, or clothing image
+
+- `MEMBRA-RESALE-*`: Clothing resale bundle
+- `MEMBRA-STORAGE-*`: Closet shelf storage
+- `MEMBRA-RELAY-*`: Package holding or pickup point
+- `MEMBRA-WEAR-*`: Wearable media candidate
+- `MEMBRA-STORAGE-*`: Storage bin capacity
+- `MEMBRA-TASK-*`: Sorting or decluttering task listing
+
+### Example fallback for apartment/living room image
+
+- `MEMBRA-SEAT-*`: Couch seat + Wi-Fi workspace
+- `MEMBRA-WINDOW-*`: Window ad surface
+- `MEMBRA-WALLAD-*`: Wall QR poster surface
+- `MEMBRA-STORAGE-*`: Shelf storage slot
+- `MEMBRA-RELAY-*`: Local handoff pickup point
+
+### Example fallback for car image
+
+- `MEMBRA-CARAD-*`: Rear window ad space
+- `MEMBRA-CARAD-*`: Side window QR decal
+- `MEMBRA-STORAGE-*`: Trunk storage capacity
+- `MEMBRA-RELAY-*`: Local delivery handoff route
+- `MEMBRA-CAMPAIGN-*`: Mobile campaign route
 
 ## SKU standard
 
@@ -157,6 +313,7 @@ If an image shows desk or office equipment, suggest:
 Write SHA-256 proof entries for:
 
 - photo_analyzed
+- picture_inventory_mapped
 - sku_map_created
 - inventory_items_created
 - listing_drafts_created
