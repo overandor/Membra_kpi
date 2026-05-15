@@ -1,0 +1,19 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="page-head"><h1>{{ listing.title }}</h1><p>Owner-confirmed internal marketplace listing.</p></section>
+<div class="grid-2">
+  <div class="card listing-detail">
+    <span>{{ listing.sku }}</span>
+    <h2>{{ listing.title }}</h2>
+    <p>{{ listing.description }}</p>
+    <div class="price">${{ listing.price_low }}–${{ listing.price_high }} / {{ listing.pricing_unit }}</div>
+    <p class="status">{{ listing.visibility_status }}</p>
+  </div>
+  <div class="card">
+    <h2>Trust boundary</h2>
+    <p>This listing became visible only after owner confirmation. MEMBRA records proof and eligibility. MEMBRA does not custody funds. External rails settle money.</p>
+    <button class="btn" onclick="createQrArtifact('{{ listing.listing_id }}','{{ listing.title }}')">Create QR artifact</button>
+    <pre id="qrResult" class="json-box">No QR artifact yet.</pre>
+  </div>
+</div>
+{% endblock %}
