@@ -1,0 +1,17 @@
+{
+  "name": "membra-kpi-vercel-frontend",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Static Vercel landing page and dashboard for MEMBRA KPI.",
+  "scripts": {
+    "dev": "vercel dev",
+    "build": "node scripts/verify_frontend.js",
+    "start": "vercel dev",
+    "verify": "node scripts/verify_frontend.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {},
+  "devDependencies": {}
+}
