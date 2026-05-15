@@ -4,45 +4,50 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>MEMBRA KPI Dashboard</title>
-  <meta name="description" content="MEMBRA KPI Vercel dashboard for live backend health, records, ProofBook, marketplace listings, and event outbox." />
-  <meta name="theme-color" content="#050403" />
+  <meta name="description" content="MEMBRA KPI production dashboard — assetification control room, live backend health, marketplace listings, ProofBook, and event outbox." />
+  <meta name="theme-color" content="#0f1115" />
   <link rel="manifest" href="/manifest.webmanifest" />
   <link rel="stylesheet" href="/assets/membra.css" />
   <script>window.MEMBRA_API_BASE = window.MEMBRA_API_BASE || '';</script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
 </head>
 <body>
-  <nav class="nav shell">
-    <a class="brand" href="/"><span class="mark">M</span><span>MEMBRA KPI</span></a>
-    <div class="links">
-      <a href="/">Landing</a>
-      <a href="#connect">Connect</a>
-      <a href="#upload">Upload</a>
-      <a href="#outbox">Outbox</a>
-      <a href="https://github.com/overandor/Membra_kpi">GitHub</a>
+  <nav class="nav">
+    <div class="shell" style="display:flex;align-items:center;justify-content:space-between;width:100%">
+      <a class="brand" href="/"><span class="mark">M</span><span>MEMBRA KPI</span></a>
+      <div class="links">
+        <a href="/">Landing</a>
+        <a href="#connect">Connect</a>
+        <a href="#upload">Upload</a>
+        <a href="#outbox">Outbox</a>
+        <a href="https://github.com/overandor/Membra_kpi" target="_blank">GitHub</a>
+      </div>
     </div>
   </nav>
 
   <main class="shell">
     <section class="page-head">
-      <span class="badge">Neomorphic control room • live backend only</span>
-      <h1>MEMBRA KPI dashboard.</h1>
-      <p class="lead">Connect this Vercel frontend to the deployed FastAPI backend to see real KPI records, public listings, ProofBook events, and event-outbox delivery state.</p>
+      <span class="badge">Production Control Room &middot; Live Backend Only</span>
+      <h1>Dashboard.</h1>
+      <p class="lead">Connect this Vercel frontend to your deployed FastAPI backend to monitor real KPI records, public listings, ProofBook events, and event-outbox delivery state.</p>
     </section>
 
     <section id="connect" class="card hot">
       <span class="kicker">Connection</span>
       <h2>Backend connection</h2>
-      <p class="muted">Set your deployed backend URL. Example: <code>https://your-membra-kpi-api.onrender.com</code> or your Replit deployment URL. You can also append <code>?api=https://your-backend</code> to this page.</p>
-      <div class="input-row">
+      <p class="muted">Set your deployed backend URL. Example: <code>https://your-membra-kpi-api.onrender.com</code> or append <code>?api=https://your-backend</code> to this page.</p>
+      <div class="input-row" style="margin-top:18px">
         <input id="apiBaseInput" placeholder="https://your-membra-kpi-backend.example.com" autocomplete="url" />
-        <button class="primary" onclick="connectDashboard()">Connect</button>
-        <button onclick="clearConnection()">Clear</button>
+        <button class="btn-primary" onclick="connectDashboard()">Connect</button>
+        <button class="btn" onclick="clearConnection()">Clear</button>
       </div>
-      <div class="mini-grid">
+      <div class="mini-grid" style="margin-top:18px">
         <div class="mini"><span class="kicker">API Base</span><p><strong id="apiBaseText">Not configured</strong></p></div>
         <div class="mini"><span class="kicker">Status</span><p id="connectionStatus" class="status warn">● not connected</p></div>
       </div>
-      <pre id="healthJson" class="json">Waiting for backend connection.</pre>
+      <pre id="healthJson" class="json" style="margin-top:18px">Waiting for backend connection.</pre>
     </section>
 
     <section class="section">
@@ -69,13 +74,13 @@
         <span class="kicker">Assetify</span>
         <h2>Upload proof photo</h2>
         <p class="muted">This sends a real image to <code>/api/photo/analyze</code> on your configured backend.</p>
-        <label class="muted">Image<br><input name="image" type="file" accept="image/*" required></label><br><br>
-        <label class="muted">Owner ID<br><input name="owner_id" value="owner_vercel_dashboard"></label><br><br>
-        <label class="muted">Room / asset type<br><input name="room_type" placeholder="living room, car, closet, window"></label><br><br>
-        <label class="muted">Monetization goal<br><input name="monetization_goal" placeholder="window ads, storage, car ads, wear ads"></label><br><br>
-        <label class="muted">Notes<br><input name="user_notes" placeholder="Describe what you control and what should not be listed."></label><br><br>
-        <label class="muted">Location hint<br><input name="location_hint" placeholder="downtown, first floor, urban route"></label><br><br>
-        <button class="primary" type="submit">Analyze Photo</button>
+        <label>Image<br><input name="image" type="file" accept="image/*" required></label>
+        <label>Owner ID<br><input name="owner_id" value="owner_vercel_dashboard"></label>
+        <label>Room / asset type<br><input name="room_type" placeholder="living room, car, closet, window"></label>
+        <label>Monetization goal<br><input name="monetization_goal" placeholder="window ads, storage, car ads, wear ads"></label>
+        <label>Notes<br><input name="user_notes" placeholder="Describe what you control and what should not be listed."></label>
+        <label>Location hint<br><input name="location_hint" placeholder="downtown, first floor, urban route"></label>
+        <button class="btn-primary" type="submit" style="margin-top:8px">Analyze Photo</button>
       </form>
       <div class="card">
         <span class="kicker">Result</span>
@@ -97,9 +102,36 @@
         <p class="muted">Requires backend admin token. This calls <code>POST /api/events/outbox/replay</code>.</p>
         <div class="input-row">
           <input id="adminToken" type="password" placeholder="x-admin-token" autocomplete="off" />
-          <button onclick="replayOutbox()">Replay</button>
+          <button class="btn-primary" onclick="replayOutbox()">Replay</button>
         </div>
-        <pre id="replayResult" class="json">No replay yet.</pre>
+        <pre id="replayResult" class="json" style="margin-top:14px">No replay yet.</pre>
+      </div>
+    </section>
+
+    <section class="section">
+      <span class="kicker">Quick links</span>
+      <h2>External access</h2>
+      <div class="grid four">
+        <a class="card" href="https://membra-kpi.vercel.app" target="_blank" style="text-decoration:none">
+          <span class="kicker">Vercel</span>
+          <h3>membra-kpi.vercel.app</h3>
+          <p class="muted">Production frontend URL</p>
+        </a>
+        <a class="card" href="https://github.com/overandor/Membra_kpi" target="_blank" style="text-decoration:none">
+          <span class="kicker">Source</span>
+          <h3>GitHub Repository</h3>
+          <p class="muted">Inspect source code and contribute</p>
+        </a>
+        <div class="card">
+          <span class="kicker">Docs</span>
+          <h3>API Reference</h3>
+          <p class="muted">Explore /api/health, /api/ready, /api/dashboard</p>
+        </div>
+        <div class="card">
+          <span class="kicker">Support</span>
+          <h3>Deployment Guide</h3>
+          <p class="muted">Render, Replit, Fly.io, Railway, Vercel</p>
+        </div>
       </div>
     </section>
   </main>

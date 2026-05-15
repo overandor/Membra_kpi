@@ -5,28 +5,35 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>MEMBRA KPI — Assetification Marketplace</title>
   <meta name="description" content="MEMBRA KPI turns eligible physical space, car ad surfaces, first-floor windows, wearables, storage, and local handoff capacity into inventory, SKUs, KPI cards, proof records, and owner-confirmed marketplace listings." />
+  <meta name="theme-color" content="#0f1115" />
+  <link rel="manifest" href="/manifest.webmanifest" />
   <link rel="stylesheet" href="/assets/membra.css" />
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
 </head>
 <body>
-  <nav class="nav shell">
-    <a class="brand" href="/"><span class="mark">M</span><span>MEMBRA KPI</span></a>
-    <div class="links">
-      <a href="#how">How it works</a>
-      <a href="#assets">Assets</a>
-      <a href="/dashboard">Dashboard</a>
-      <a href="https://github.com/overandor/Membra_kpi">GitHub</a>
+  <nav class="nav">
+    <div class="shell" style="display:flex;align-items:center;justify-content:space-between;width:100%">
+      <a class="brand" href="/"><span class="mark">M</span><span>MEMBRA KPI</span></a>
+      <div class="links">
+        <a href="#how">How it works</a>
+        <a href="#assets">Assets</a>
+        <a href="/dashboard">Dashboard</a>
+        <a href="https://github.com/overandor/Membra_kpi" target="_blank">GitHub</a>
+      </div>
     </div>
   </nav>
 
   <main class="shell">
     <section class="hero">
       <div>
-        <span class="badge">AI assetification • ProofBook • Marketplace readiness</span>
+        <span class="badge">AI Assetification &middot; ProofBook &middot; Marketplace Readiness</span>
         <h1>Turn idle reality into measurable opportunity.</h1>
         <p class="lead">MEMBRA KPI helps owners structure eligible apartment space, storage, car ad space, first-floor window ads, wearable media, tools, and local handoff capacity into inventory, SKU records, KPI cards, proof hashes, private drafts, and owner-confirmed listings.</p>
         <div class="actions">
-          <a class="btn primary" href="/dashboard">Open Dashboard</a>
-          <a class="btn" href="https://github.com/overandor/Membra_kpi">View Repo</a>
+          <a class="btn-primary" href="/dashboard">Open Dashboard</a>
+          <a class="btn" href="https://github.com/overandor/Membra_kpi" target="_blank">View Repo</a>
         </div>
         <p class="fine">AI may draft inventory. Owner confirmation is required before marketplace visibility. Estimates are not guaranteed. External rails settle money.</p>
       </div>
@@ -34,35 +41,69 @@
         <span class="pill">Live product flow</span>
         <div class="bubble user">I have a first-floor window and car rear window. Can MEMBRA monetize this?</div>
         <div class="bubble ai">Upload real proof. MEMBRA can create inventory candidates, SKUs, KPI cards, ProofBook records, private drafts, event-outbox messages, and owner-confirmed marketplace visibility.</div>
-        <div class="stats">
-          <div class="stat"><span>Pipeline</span><b>Upload</b></div>
-          <div class="stat"><span>Records</span><b>SKU</b></div>
-          <div class="stat"><span>Trust</span><b>Proof</b></div>
-          <div class="stat"><span>Output</span><b>Listing</b></div>
+        <div style="margin-top:14px;display:grid;grid-template-columns:repeat(4,1fr);gap:10px">
+          <div class="card stat"><span>Pipeline</span><b>Upload</b></div>
+          <div class="card stat"><span>Records</span><b>SKU</b></div>
+          <div class="card stat"><span>Trust</span><b>Proof</b></div>
+          <div class="card stat"><span>Output</span><b>Listing</b></div>
         </div>
       </div>
     </section>
 
-    <section id="how" class="section card">
-      <h2>Start-to-end system</h2>
-      <div class="flow">
-        <span>Upload</span><span>Analyze</span><span>Inventory</span><span>SKU</span><span>KPI</span><span>ProofBook</span><span>Draft</span><span>Owner Confirm</span><span>Marketplace</span><span>Outbox</span>
+    <section id="how" class="section">
+      <div class="card">
+        <span class="kicker">Workflow</span>
+        <h2>Start-to-end system</h2>
+        <div class="flow">
+          <span>Upload</span><span>Analyze</span><span>Inventory</span><span>SKU</span><span>KPI</span><span>ProofBook</span><span>Draft</span><span>Owner Confirm</span><span>Marketplace</span><span>Outbox</span>
+        </div>
       </div>
     </section>
 
     <section id="assets" class="section">
+      <span class="kicker">Categories</span>
       <h2>Assetification categories</h2>
       <div class="grid four">
-        <div class="card"><span class="pill">Apartment</span><h3>Storage / access / shelf space</h3><p class="muted">Create private drafts for owner-controlled storage, workspace, and handoff capacity.</p><div class="asset-price">Proof first</div></div>
-        <div class="card"><span class="pill">Vehicle</span><h3>Car ad space</h3><p class="muted">Rear-window and side-window QR/NFC placement candidates with route and safety review.</p><div class="asset-price">Owner confirmed</div></div>
-        <div class="card"><span class="pill">Window</span><h3>First-floor ad surface</h3><p class="muted">Street-facing window media requires building, lease, and local-rule compatibility.</p><div class="asset-price">Review gated</div></div>
-        <div class="card"><span class="pill">Wear</span><h3>Wearable QR media</h3><p class="muted">Shirts, hoodies, bags, and badges become campaign candidates after consent and proof.</p><div class="asset-price">Campaign ready</div></div>
+        <div class="card">
+          <span class="pill">Apartment</span>
+          <h3>Storage / access / shelf space</h3>
+          <p class="muted">Create private drafts for owner-controlled storage, workspace, and handoff capacity.</p>
+          <div class="asset-price">Proof first</div>
+        </div>
+        <div class="card">
+          <span class="pill">Vehicle</span>
+          <h3>Car ad space</h3>
+          <p class="muted">Rear-window and side-window QR/NFC placement candidates with route and safety review.</p>
+          <div class="asset-price">Owner confirmed</div>
+        </div>
+        <div class="card">
+          <span class="pill">Window</span>
+          <h3>First-floor ad surface</h3>
+          <p class="muted">Street-facing window media requires building, lease, and local-rule compatibility.</p>
+          <div class="asset-price">Review gated</div>
+        </div>
+        <div class="card">
+          <span class="pill">Wear</span>
+          <h3>Wearable QR media</h3>
+          <p class="muted">Shirts, hoodies, bags, and badges become campaign candidates after consent and proof.</p>
+          <div class="asset-price">Campaign ready</div>
+        </div>
       </div>
     </section>
 
     <section class="section grid two">
-      <div class="card"><h2>Vercel frontend</h2><p>This landing page is static and Vercel-ready. The dashboard connects to your deployed FastAPI backend through a configurable API base URL.</p><a class="btn primary" href="/dashboard">Configure dashboard</a></div>
-      <div class="card"><h2>Production boundary</h2><p>MEMBRA records proof, consent, listings, analytics, and payout eligibility. It does not custody funds. External payment rails settle money.</p><a class="btn" href="https://github.com/overandor/Membra_kpi">Inspect source</a></div>
+      <div class="card">
+        <span class="kicker">Frontend</span>
+        <h2>Vercel deployment</h2>
+        <p>This landing page is static and Vercel-ready. The dashboard connects to your deployed FastAPI backend through a configurable API base URL.</p>
+        <a class="btn-primary" href="/dashboard">Configure dashboard</a>
+      </div>
+      <div class="card">
+        <span class="kicker">Boundary</span>
+        <h2>Production scope</h2>
+        <p>MEMBRA records proof, consent, listings, analytics, and payout eligibility. It does not custody funds. External payment rails settle money.</p>
+        <a class="btn" href="https://github.com/overandor/Membra_kpi" target="_blank">Inspect source</a>
+      </div>
     </section>
   </main>
 

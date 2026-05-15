@@ -1,3 +1,5 @@
+/* MEMBRA KPI — Production Neomorphic Dashboard Logic */
+
 async function loadVercelConfig() {
   try {
     const res = await fetch('/membra-config.json', { cache: 'no-store' });
@@ -80,9 +82,9 @@ function setHtml(id, value) {
 }
 
 function statusBadge(ok, label) {
-  if (ok === true) return `<span class="status online">● ${escapeHtml(label || 'online')}</span>`;
-  if (ok === false) return `<span class="status offline">● ${escapeHtml(label || 'offline')}</span>`;
-  return `<span class="status warn">● ${escapeHtml(label || 'not connected')}</span>`;
+  if (ok === true) return `<span class="status online">${escapeHtml(label || 'online')}</span>`;
+  if (ok === false) return `<span class="status offline">${escapeHtml(label || 'offline')}</span>`;
+  return `<span class="status warn">${escapeHtml(label || 'not connected')}</span>`;
 }
 
 function emptyState(title, detail) {
