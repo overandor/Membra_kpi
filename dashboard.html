@@ -5,6 +5,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>MEMBRA KPI Dashboard</title>
   <meta name="description" content="MEMBRA KPI Vercel dashboard for live backend health, records, ProofBook, marketplace listings, and event outbox." />
+  <meta name="theme-color" content="#050403" />
+  <link rel="manifest" href="/manifest.webmanifest" />
   <link rel="stylesheet" href="/assets/membra.css" />
   <script>window.MEMBRA_API_BASE = window.MEMBRA_API_BASE || '';</script>
 </head>
@@ -15,47 +17,56 @@
       <a href="/">Landing</a>
       <a href="#connect">Connect</a>
       <a href="#upload">Upload</a>
+      <a href="#outbox">Outbox</a>
       <a href="https://github.com/overandor/Membra_kpi">GitHub</a>
     </div>
   </nav>
 
   <main class="shell">
     <section class="page-head">
-      <span class="badge">Vercel dashboard shell</span>
+      <span class="badge">Neomorphic control room • live backend only</span>
       <h1>MEMBRA KPI dashboard.</h1>
-      <p class="lead">Connect this static Vercel frontend to the deployed FastAPI backend to see live KPI records, public listings, ProofBook events, and event-outbox delivery state.</p>
+      <p class="lead">Connect this Vercel frontend to the deployed FastAPI backend to see real KPI records, public listings, ProofBook events, and event-outbox delivery state.</p>
     </section>
 
-    <section id="connect" class="card">
+    <section id="connect" class="card hot">
+      <span class="kicker">Connection</span>
       <h2>Backend connection</h2>
       <p class="muted">Set your deployed backend URL. Example: <code>https://your-membra-kpi-api.onrender.com</code> or your Replit deployment URL. You can also append <code>?api=https://your-backend</code> to this page.</p>
       <div class="input-row">
-        <input id="apiBaseInput" placeholder="https://your-membra-kpi-backend.example.com" />
+        <input id="apiBaseInput" placeholder="https://your-membra-kpi-backend.example.com" autocomplete="url" />
         <button class="primary" onclick="connectDashboard()">Connect</button>
+        <button onclick="clearConnection()">Clear</button>
       </div>
-      <p>API Base: <strong id="apiBaseText">Not configured</strong></p>
-      <div id="connectionStatus" class="status warn">● not connected</div>
+      <div class="mini-grid">
+        <div class="mini"><span class="kicker">API Base</span><p><strong id="apiBaseText">Not configured</strong></p></div>
+        <div class="mini"><span class="kicker">Status</span><p id="connectionStatus" class="status warn">● not connected</p></div>
+      </div>
       <pre id="healthJson" class="json">Waiting for backend connection.</pre>
     </section>
 
     <section class="section">
+      <span class="kicker">System counters</span>
       <h2>Live counts</h2>
       <div id="dashboardStats" class="stats"></div>
     </section>
 
     <section class="section grid two">
       <div class="card">
-        <h2>Owner-confirmed marketplace</h2>
+        <span class="kicker">Marketplace</span>
+        <h2>Owner-confirmed listings</h2>
         <div id="listingsTable" class="muted">Connect backend to load listings.</div>
       </div>
       <div class="card">
+        <span class="kicker">Trust ledger</span>
         <h2>ProofBook</h2>
         <div id="proofbookTable" class="muted">Connect backend to load proof records.</div>
       </div>
     </section>
 
     <section id="upload" class="section grid two">
-      <form id="photoForm" class="card">
+      <form id="photoForm" class="card hot">
+        <span class="kicker">Assetify</span>
         <h2>Upload proof photo</h2>
         <p class="muted">This sends a real image to <code>/api/photo/analyze</code> on your configured backend.</p>
         <label class="muted">Image<br><input name="image" type="file" accept="image/*" required></label><br><br>
@@ -67,22 +78,25 @@
         <button class="primary" type="submit">Analyze Photo</button>
       </form>
       <div class="card">
+        <span class="kicker">Result</span>
         <h2>Photo analysis result</h2>
         <pre id="photoResult" class="json">No upload yet.</pre>
       </div>
     </section>
 
-    <section class="section grid two">
+    <section id="outbox" class="section grid two">
       <div class="card">
+        <span class="kicker">Durable events</span>
         <h2>Event outbox</h2>
         <p class="muted">KPI events are written locally first, then replayed to API, ProofBook, Wallet, Admin, and QR Gateway sinks.</p>
         <pre id="outboxJson" class="json">Connect backend to load outbox stats.</pre>
       </div>
       <div class="card">
+        <span class="kicker">Admin action</span>
         <h2>Replay outbox</h2>
         <p class="muted">Requires backend admin token. This calls <code>POST /api/events/outbox/replay</code>.</p>
         <div class="input-row">
-          <input id="adminToken" type="password" placeholder="x-admin-token" />
+          <input id="adminToken" type="password" placeholder="x-admin-token" autocomplete="off" />
           <button onclick="replayOutbox()">Replay</button>
         </div>
         <pre id="replayResult" class="json">No replay yet.</pre>
