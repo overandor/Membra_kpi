@@ -1,0 +1,9 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="page-head"><h1>Wallet / Payout Eligibility</h1><p>MEMBRA records payout eligibility and ledger events. MEMBRA does not custody funds. External payment rails settle money.</p></section>
+<section class="card warning">Proof is not money. Eligibility is not settlement. External rails settle money.</section>
+<section class="grid-2">
+  <div class="card"><h2>Payout eligibility</h2><div class="table-wrap"><table><tr><th>User</th><th>Subject</th><th>Amount</th><th>Status</th><th>Reason</th></tr>{% for e in eligibility %}<tr><td>{{ e.user_id }}</td><td>{{ e.subject_type }} / {{ e.subject_id }}</td><td>${{ e.eligible_amount_usd }}</td><td>{{ e.status }}</td><td>{{ e.eligibility_reason }}</td></tr>{% endfor %}</table></div></div>
+  <div class="card"><h2>Ledger events</h2><div class="table-wrap"><table><tr><th>User</th><th>Event</th><th>Amount</th><th>Status</th></tr>{% for e in events %}<tr><td>{{ e.user_id }}</td><td>{{ e.event_type }}</td><td>${{ e.amount_usd }}</td><td>{{ e.status }}</td></tr>{% endfor %}</table></div></div>
+</section>
+{% endblock %}
