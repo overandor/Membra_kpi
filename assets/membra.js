@@ -32,9 +32,7 @@ function money(value) {
   return n.toLocaleString(undefined, { style: 'currency', currency: 'USD', maximumFractionDigits: 0 });
 }
 
-function pretty(obj) {
-  return JSON.stringify(obj, null, 2);
-}
+function pretty(obj) { return JSON.stringify(obj, null, 2); }
 
 function escapeHtml(value) {
   return String(value ?? '')
@@ -68,30 +66,15 @@ async function fetchForm(path, formData) {
 }
 
 function qs(id) { return document.getElementById(id); }
-
-function setText(id, value) {
-  const el = qs(id);
-  if (el) el.textContent = value;
-}
-
-function setHtml(id, value) {
-  const el = qs(id);
-  if (el) el.innerHTML = value;
-}
-
+function setText(id, value) { const el = qs(id); if (el) el.textContent = value; }
+function setHtml(id, value) { const el = qs(id); if (el) el.innerHTML = value; }
 function statusBadge(ok, label) {
   if (ok === true) return `<span class="status online">● ${escapeHtml(label || 'online')}</span>`;
   if (ok === false) return `<span class="status offline">● ${escapeHtml(label || 'offline')}</span>`;
   return `<span class="status warn">● ${escapeHtml(label || 'not connected')}</span>`;
 }
-
-function emptyState(title, detail) {
-  return `<div class="empty"><strong>${escapeHtml(title)}</strong><br><span>${escapeHtml(detail)}</span></div>`;
-}
-
-function loadingSkeleton(label = 'Loading live backend data') {
-  return `<div class="skeleton" aria-label="${escapeHtml(label)}"></div>`;
-}
+function emptyState(title, detail) { return `<div class="empty"><strong>${escapeHtml(title)}</strong><br><span>${escapeHtml(detail)}</span></div>`; }
+function loadingSkeleton(label = 'Loading live backend data') { return `<div class="skeleton" aria-label="${escapeHtml(label)}"></div>`; }
 
 async function connectDashboard() {
   const input = qs('apiBaseInput');
@@ -124,6 +107,7 @@ async function loadDashboard() {
     setHtml('listingsTable', emptyState('Backend disconnected', 'Connect a FastAPI backend to show owner-confirmed marketplace records.'));
     setHtml('proofbookTable', emptyState('Backend disconnected', 'Connect a backend to show ProofBook records.'));
     setText('outboxJson', pretty({ status: 'backend_disconnected' }));
+    setHtml('conciergeState', statusBadge(false, 'backend required'));
     return;
   }
 
@@ -136,6 +120,7 @@ async function loadDashboard() {
 
     if (health.status === 'fulfilled') {
       setHtml('connectionStatus', statusBadge(true, health.value.app || 'connected'));
+      setHtml('conciergeState', statusBadge(true, 'concierge ready'));
       setText('healthJson', pretty({ health: health.value, ready: ready.status === 'fulfilled' ? ready.value : ready.reason.message }));
     } else {
       throw health.reason;
@@ -146,6 +131,7 @@ async function loadDashboard() {
     await Promise.allSettled([loadProofbook(), loadListings(), loadOutbox()]);
   } catch (err) {
     setHtml('connectionStatus', statusBadge(false, 'backend unreachable'));
+    setHtml('conciergeState', statusBadge(false, 'backend unreachable'));
     setText('healthJson', pretty({ error: err.message, apiBase: api }));
     renderCounts({});
     setHtml('listingsTable', emptyState('Backend unreachable', 'The dashboard could not load marketplace listings from the configured backend.'));
@@ -156,14 +142,8 @@ async function loadDashboard() {
 
 function renderCounts(counts) {
   const labels = [
-    ['photos', 'Photo proofs'],
-    ['inventory', 'Inventory items'],
-    ['drafts', 'Private drafts'],
-    ['public_listings', 'Live listings'],
-    ['kpis', 'KPI cards'],
-    ['proofs', 'ProofBook rows'],
-    ['event_outbox_pending', 'Outbox pending'],
-    ['event_outbox_delivered', 'Outbox delivered']
+    ['photos', 'Photo proofs'], ['inventory', 'Inventory items'], ['drafts', 'Private drafts'], ['public_listings', 'Live listings'],
+    ['kpis', 'KPI cards'], ['proofs', 'ProofBook rows'], ['event_outbox_pending', 'Outbox pending'], ['event_outbox_delivered', 'Outbox delivered']
   ];
   setHtml('dashboardStats', labels.map(([key, label]) => `
     <div class="card stat"><span>${escapeHtml(label)}</span><b>${counts[key] ?? '—'}</b></div>
@@ -226,9 +206,44 @@ async function replayOutbox() {
   }
 }
 
+function renderConciergeAnswer(data) {
+  const answer = escapeHtml(data.answer || 'No answer returned.').replaceAll('\n', '<br>');
+  const actions = (data.actions || []).map(action => `<li><strong>${escapeHtml(action.label)}</strong><br><small>${escapeHtml(action.endpoint)} · ${escapeHtml(action.panel)}</small></li>`).join('');
+  return `
+    <div class="bubble ai"><strong>MEMBRA Concierge</strong><br>${answer}</div>
+    <div class="action-list"><span class="kicker">Recommended next actions</span><ul>${actions || '<li>No action returned.</li>'}</ul></div>
+    <details><summary>Provider and context</summary><pre class="json">${escapeHtml(pretty({ provider: data.provider, safety: data.safety, dashboard_context: data.dashboard_context }))}</pre></details>
+  `;
+}
+
+async function askConcierge(messageOverride) {
+  const input = qs('conciergeInput');
+  const output = qs('conciergeOutput');
+  const message = (messageOverride || input?.value || '').trim();
+  if (!message) {
+    if (output) output.innerHTML = emptyState('Ask MEMBRA first', 'Describe an apartment, car ad surface, first-floor window, wearable, dataset, or local assetification goal.');
+    return;
+  }
+  if (output) output.innerHTML = `<div class="bubble user">${escapeHtml(message)}</div>${loadingSkeleton('MEMBRA Concierge thinking')}`;
+  try {
+    const data = await fetchJson('/api/product/ai/concierge', { method: 'POST', body: JSON.stringify({ message, context: { source: 'vercel_dashboard' } }) });
+    if (output) output.innerHTML = `<div class="bubble user">${escapeHtml(message)}</div>${renderConciergeAnswer(data)}`;
+  } catch (err) {
+    if (output) output.innerHTML = `<div class="bubble user">${escapeHtml(message)}</div>${emptyState('Concierge unavailable', err.message)}`;
+  }
+}
+
+function quickAsk(text) {
+  const input = qs('conciergeInput');
+  if (input) input.value = text;
+  askConcierge(text);
+}
+
 document.addEventListener('DOMContentLoaded', async () => {
   await loadVercelConfig();
   const form = qs('photoForm');
   if (form) form.addEventListener('submit', submitPhotoForm);
+  const conciergeForm = qs('conciergeForm');
+  if (conciergeForm) conciergeForm.addEventListener('submit', (event) => { event.preventDefault(); askConcierge(); });
   if (qs('dashboardStats')) loadDashboard();
 });
