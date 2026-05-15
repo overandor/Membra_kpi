@@ -23,12 +23,13 @@ from starlette.middleware.trustedhost import TrustedHostMiddleware
 from membra_kpi.assetification import assetify_from_context
 from membra_kpi.deep_backend import BackendContext, apply_deep_backend_schema, backend_status, verify_chain
 from membra_kpi.marketplace import confirm_visibility, create_listing_draft, request_visibility
+from membra_kpi.product_router import build_product_router
 from membra_kpi.proofbook import create_proof_entry, sha256_payload
 from membra_kpi.security import apply_security_headers, enforce_rate_limit, validate_data_upload, validate_image_upload, verify_admin_token
 from membra_kpi.solana_devnet import anchor_listing_on_solana_devnet, solana_devnet_status
 
 APP_NAME = "MEMBRA KPI Assetification Marketplace"
-APP_VERSION = "1.2.0"
+APP_VERSION = "1.3.0"
 APP_ENV = os.getenv("APP_ENV", "development")
 APP_BASE_URL = os.getenv("APP_BASE_URL", "http://localhost:8000").rstrip("/")
 DB_PATH = Path(os.getenv("DB_PATH", "./data/membra.db"))
@@ -104,6 +105,7 @@ CREATE TABLE IF NOT EXISTS marketplace_events(event_id TEXT PRIMARY KEY, listing
         apply_deep_backend_schema(conn)
 
 init_db()
+app.include_router(build_product_router(db))
 
 def insert_proof(subject_type: str, subject_id: str, event_type: str, metadata: dict[str, Any] | None = None) -> dict[str, Any]:
     entry = create_proof_entry(subject_type, subject_id, event_type, metadata or {})
@@ -127,7 +129,7 @@ def home(request: Request):
 
 @app.get("/api/health")
 def health():
-    return {"ok": True, "app": APP_NAME, "version": APP_VERSION, "env": APP_ENV}
+    return {"ok": True, "app": APP_NAME, "version": APP_VERSION, "env": APP_ENV, "product_router_mounted": True}
 
 @app.get("/api/ready")
 def ready():
