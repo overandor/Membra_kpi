@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>{{ app_name }}</title>
+  <link rel="stylesheet" href="/static/styles.css" />
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body>
+  <div class="orb orb-a"></div>
+  <div class="orb orb-b"></div>
+  <nav class="nav shell">
+    <a class="brand" href="/"><span class="brand-mark">M</span><span>MEMBRA KPI</span></a>
+    <div class="nav-links">
+      <a href="/dashboard">Dashboard</a>
+      <a href="/ai">AI Concierge</a>
+      <a href="/assetify">Assetify</a>
+      <a href="/kpi">KPI</a>
+      <a href="/inventory">Inventory</a>
+      <a href="/marketplace">Marketplace</a>
+      <a href="/proofbook">ProofBook</a>
+      <a href="/wallet">Wallet</a>
+      <a href="/admin">Admin</a>
+      <a href="/api-docs">API</a>
+    </div>
+  </nav>
+  <main class="shell">
+    {% block content %}{% endblock %}
+  </main>
+  <footer class="footer shell">
+    <div><strong>MEMBRA</strong> — The Permission Layer for Local Commerce.</div>
+    <div>Permissioned. Local. Profitable.</div>
+  </footer>
+  <script src="/static/app.js"></script>
+  {% block scripts %}{% endblock %}
+</body>
+</html>
