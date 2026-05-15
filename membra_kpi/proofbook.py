@@ -8,7 +8,7 @@ from __future__ import annotations
 import datetime as dt
 import hashlib
 import json
-from dataclasses import dataclass, asdict
+from dataclasses import asdict, dataclass
 from typing import Any
 
 
@@ -26,6 +26,10 @@ PROOF_EVENTS = {
     "payout_eligibility_created",
     "proof_reviewed",
     "admin_decision_recorded",
+    "solana_devnet_anchor_requested",
+    "event_outbox_enqueued",
+    "event_outbox_delivered",
+    "event_outbox_failed",
 }
 
 
