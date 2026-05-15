@@ -5,7 +5,8 @@ It accepts an iPhone/HEIC-converted/JPEG/PNG/WebP upload, stores the photo,
 checks image quality, screens for duplicates, runs SKU identification, runs the
 existing MEMBRA assetification engine, writes inventory, SKU, KPI, ProofBook,
 listing draft, optional owner-confirmed public listing, payout eligibility,
-wallet ledger, QR artifact records, and MEMBRA proprietary commercial packets.
+wallet ledger, QR artifact records, MEMBRA proprietary commercial packets, and
+an auditable MEMBRA LLM DAG execution record.
 """
 from __future__ import annotations
 
@@ -19,6 +20,7 @@ from fastapi import File, Form, HTTPException, UploadFile
 from .assetification import assetify_from_context
 from .image_quality import analyze_image_file, hamming_distance_hex
 from .image_sku_engine import identify_sku_candidates
+from .llm_dag import run_membra_listing_dag
 from .marketplace import confirm_visibility, create_listing_draft, request_visibility
 from .proofbook import sha256_payload
 from .proprietary_listing_os import generate_listing_packet, summarize_packet_for_operator
@@ -103,6 +105,28 @@ def ensure_image_ingestion_table(deps: IphoneListingDeps) -> None:
     )
     deps.execute("CREATE INDEX IF NOT EXISTS idx_packets_owner_score ON proprietary_listing_packets(owner_id, valuation_score)", ())
     deps.execute("CREATE INDEX IF NOT EXISTS idx_packets_listing ON proprietary_listing_packets(listing_id)", ())
+    deps.execute(
+        """
+        CREATE TABLE IF NOT EXISTS llm_dag_runs(
+          dag_id TEXT PRIMARY KEY,
+          graph_version TEXT NOT NULL,
+          status TEXT NOT NULL,
+          photo_id TEXT NOT NULL,
+          owner_id TEXT NOT NULL,
+          listing_id TEXT NOT NULL,
+          packet_id TEXT NOT NULL,
+          audit_hash TEXT NOT NULL,
+          duration_ms INTEGER NOT NULL,
+          node_runs_json TEXT NOT NULL,
+          outputs_json TEXT NOT NULL,
+          dag_json TEXT NOT NULL,
+          created_at TEXT NOT NULL
+        )
+        """,
+        (),
+    )
+    deps.execute("CREATE INDEX IF NOT EXISTS idx_dag_runs_owner ON llm_dag_runs(owner_id, created_at)", ())
+    deps.execute("CREATE INDEX IF NOT EXISTS idx_dag_runs_packet ON llm_dag_runs(packet_id)", ())
 
 
 def find_duplicate(deps: IphoneListingDeps, *, owner_id: str, exact_sha256: str, average_hash: str) -> dict[str, Any] | None:
@@ -116,8 +140,6 @@ def find_duplicate(deps: IphoneListingDeps, *, owner_id: str, exact_sha256: str,
         return exact
 
     recent: list[dict[str, Any]] = []
-    # The host app currently exposes one(), not rows(), through this module dependency.
-    # Exact matching is enforced now; near-duplicate expansion is schema-ready and can be enabled once rows() is injected.
     for row in recent:
         dist = hamming_distance_hex(average_hash, row.get("average_hash", ""))
         if dist <= 6:
@@ -214,6 +236,27 @@ def _persist_listing_packet(
             data["compliance_score"], data["operator_score"], data["valuation_score"], data["risk_tier"],
             json.dumps(data["review_actions"], sort_keys=True), json.dumps(data["missing_proof"], sort_keys=True),
             data["packet_hash"], json.dumps(data, sort_keys=True), json.dumps(operator_summary, sort_keys=True), deps.now(),
+        ),
+    )
+
+
+def _persist_dag_run(
+    deps: IphoneListingDeps,
+    *,
+    dag_result: dict[str, Any],
+    photo_id: str,
+    owner_id: str,
+    listing_id: str,
+    packet_id: str,
+) -> None:
+    deps.execute(
+        "INSERT OR REPLACE INTO llm_dag_runs VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)",
+        (
+            dag_result["dag_id"], dag_result["graph_version"], dag_result["status"], photo_id, owner_id,
+            listing_id, packet_id, dag_result["audit_hash"], int(dag_result.get("duration_ms") or 0),
+            json.dumps(dag_result.get("node_runs", []), sort_keys=True),
+            json.dumps(dag_result.get("outputs", {}), sort_keys=True),
+            json.dumps(dag_result, sort_keys=True), deps.now(),
         ),
     )
 
@@ -419,6 +462,30 @@ def register_iphone_marketplace_routes(app: Any, deps: dict[str, Any]) -> None:
         operator_summary = summarize_packet_for_operator(listing_packet)
         _persist_listing_packet(d, packet=listing_packet, operator_summary=operator_summary, photo_id=photo_id, owner_id=owner_id)
 
+        dag_result = run_membra_listing_dag(
+            {
+                "owner_id": owner_id,
+                "photo_id": photo_id,
+                "filename": filename,
+                "location_hint": location_hint,
+                "user_notes": user_notes,
+                "image_quality": quality,
+                "sku_identification": sku_identification,
+                "proprietary_listing_packet": listing_packet.to_dict(),
+                "operator_summary": operator_summary,
+                "publish": publish,
+                "owner_confirmed": owner_confirmed,
+            }
+        )
+        _persist_dag_run(
+            d,
+            dag_result=dag_result,
+            photo_id=photo_id,
+            owner_id=owner_id,
+            listing_id=best_draft["listing_id"],
+            packet_id=listing_packet.packet_id,
+        )
+
         for event in [
             "iphone_photo_uploaded",
             "image_quality_scored",
@@ -426,6 +493,7 @@ def register_iphone_marketplace_routes(app: Any, deps: dict[str, Any]) -> None:
             "iphone_picture_inventory_mapped",
             "iphone_listing_draft_created",
             "proprietary_listing_packet_generated",
+            "membra_llm_dag_executed",
         ]:
             d.insert_proof(
                 "photo",
@@ -440,9 +508,12 @@ def register_iphone_marketplace_routes(app: Any, deps: dict[str, Any]) -> None:
                     "packet_id": listing_packet.packet_id,
                     "valuation_score": listing_packet.valuation_score,
                     "risk_tier": listing_packet.risk_tier,
+                    "dag_id": dag_result["dag_id"],
+                    "dag_audit_hash": dag_result["audit_hash"],
                 },
             )
 
+        publication_gate = dag_result.get("outputs", {}).get("publication_gate", {})
         response: dict[str, Any] = {
             "success": True,
             "mode": "public_listing" if publish and owner_confirmed else "private_draft",
@@ -453,6 +524,7 @@ def register_iphone_marketplace_routes(app: Any, deps: dict[str, Any]) -> None:
             "sku_identification": sku_identification,
             "proprietary_listing_packet": listing_packet.to_dict(),
             "operator_summary": operator_summary,
+            "membra_llm_dag": dag_result,
             "scenario": result["scenario"],
             "room_summary": result["room_summary"],
             "best_inventory_item": best_item,
@@ -465,6 +537,7 @@ def register_iphone_marketplace_routes(app: Any, deps: dict[str, Any]) -> None:
                 "iphone_picture_inventory_mapped",
                 "iphone_listing_draft_created",
                 "proprietary_listing_packet_generated",
+                "membra_llm_dag_executed",
             ],
             "safety": {
                 "owner_approval_required": True,
@@ -474,6 +547,7 @@ def register_iphone_marketplace_routes(app: Any, deps: dict[str, Any]) -> None:
                 "image_quality_gate": True,
                 "operator_review_routing": True,
                 "proprietary_packet_hash": listing_packet.packet_hash,
+                "dag_audit_hash": dag_result["audit_hash"],
             },
         }
 
@@ -482,8 +556,11 @@ def register_iphone_marketplace_routes(app: Any, deps: dict[str, Any]) -> None:
             return response
 
         if publish and owner_confirmed:
-            if "block_publication" in listing_packet.review_actions:
-                response["publish_blocked_reason"] = "MEMBRA proprietary packet blocks publication until required proof/compliance fields are resolved."
+            if not publication_gate.get("publication_allowed", False):
+                response["publish_blocked_reason"] = publication_gate.get(
+                    "reason",
+                    "MEMBRA DAG blocks publication until required proof/compliance fields are resolved.",
+                )
                 return response
             published = _publish_listing(d, draft=best_draft, owner_id=owner_id)
             qr = _create_listing_qr(d, public_listing=published["public_listing"])
