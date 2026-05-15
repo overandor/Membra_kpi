@@ -1,5 +1,5 @@
 {
   "app": "MEMBRA KPI Vercel Frontend",
-  "apiBase": "",
-  "message": "Set the backend in dashboard with ?api=https://backend-url or paste it into the connection box. This static file avoids Vercel serverless function crashes."
+  "apiBase": "https://membra-kpi-api.onrender.com",
+  "message": "Default backend points to the Render service name from render.yaml. Override with /dashboard?api=https://your-render-service.onrender.com or paste a backend URL into the dashboard connection box."
 }
