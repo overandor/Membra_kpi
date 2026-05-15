@@ -1,0 +1,15 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="page-head"><h1>KPI Analysis</h1><p>Upload real CSV or XLSX data. MEMBRA parses the dataset locally, profiles fields, identifies KPI opportunities, and writes a ProofBook record.</p></section>
+<div class="grid-2">
+  <form class="card form" id="kpiForm" enctype="multipart/form-data">
+    <h2>Upload dataset</h2>
+    <label>CSV or XLSX<input type="file" name="file" accept=".csv,.xlsx,.xls" required></label>
+    <button class="btn primary" type="submit">Generate KPI Summary</button>
+    <p class="fine">Large files are summarized locally first. Full raw files are not sent to an LLM.</p>
+  </form>
+  <div class="card"><h2>Upload result</h2><pre id="kpiResult" class="json-box">No dataset uploaded yet.</pre></div>
+</div>
+<section class="card"><h2>KPI uploads</h2><div class="table-wrap"><table><tr><th>File</th><th>Rows</th><th>Columns</th><th>Created</th></tr>{% for u in uploads %}<tr><td>{{ u.filename }}</td><td>{{ u.row_count }}</td><td>{{ u.column_count }}</td><td>{{ u.created_at }}</td></tr>{% endfor %}</table></div></section>
+<section class="card"><h2>KPI cards</h2><div class="table-wrap"><table><tr><th>Title</th><th>Value</th><th>Score</th><th>Category</th></tr>{% for k in kpis %}<tr><td>{{ k.title }}</td><td>{{ k.value }}</td><td>{{ k.score }}</td><td>{{ k.category }}</td></tr>{% endfor %}</table></div></section>
+{% endblock %}
