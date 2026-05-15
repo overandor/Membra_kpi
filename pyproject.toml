@@ -1,0 +1,13 @@
+[project]
+name = "membra-kpi"
+version = "1.0.0"
+description = "MEMBRA KPI Assetification Marketplace — Replit-native FastAPI system"
+requires-python = ">=3.11"
+
+[tool.ruff]
+line-length = 140
+target-version = "py311"
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+testpaths = ["tests"]
