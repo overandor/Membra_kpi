@@ -1,0 +1,6 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="page-head"><h1>Inventory + SKU Map</h1><p>Real inventory records created from photo analysis. Drafts remain private until the owner explicitly confirms visibility.</p></section>
+<section class="card"><h2>Inventory items</h2><div class="table-wrap"><table><tr><th>SKU</th><th>Name</th><th>Asset Type</th><th>Listing Type</th><th>Price</th><th>Score</th><th>Status</th></tr>{% for item in items %}<tr><td>{{ item.sku }}</td><td>{{ item.detected_name }}</td><td>{{ item.asset_type }}</td><td>{{ item.listing_type }}</td><td>${{ item.suggested_price_low }}–${{ item.suggested_price_high }} / {{ item.pricing_unit }}</td><td>{{ item.kpi_score }}</td><td>{{ item.status }}</td></tr>{% endfor %}</table></div></section>
+<section class="grid-2"><div class="card"><h2>SKU map</h2><div class="table-wrap"><table><tr><th>SKU</th><th>Category</th><th>Title</th><th>Status</th></tr>{% for s in skus %}<tr><td>{{ s.sku }}</td><td>{{ s.category }}</td><td>{{ s.title }}</td><td>{{ s.status }}</td></tr>{% endfor %}</table></div></div><div class="card"><h2>Private drafts</h2><div class="table-wrap"><table><tr><th>SKU</th><th>Title</th><th>Status</th></tr>{% for d in drafts %}<tr><td>{{ d.sku }}</td><td>{{ d.title }}</td><td>{{ d.status }}</td></tr>{% endfor %}</table></div></div></section>
+{% endblock %}
