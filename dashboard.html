@@ -4,7 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>MEMBRA KPI Dashboard</title>
-  <meta name="description" content="MEMBRA KPI Vercel dashboard for live backend health, records, ProofBook, marketplace listings, and event outbox." />
+  <meta name="description" content="MEMBRA KPI Vercel dashboard for AI concierge, live backend health, ProofBook, marketplace listings, upload workflows, and event outbox." />
   <meta name="theme-color" content="#050403" />
   <link rel="manifest" href="/manifest.webmanifest" />
   <link rel="stylesheet" href="/assets/membra.css" />
@@ -15,6 +15,7 @@
     <a class="brand" href="/"><span class="mark">M</span><span>MEMBRA KPI</span></a>
     <div class="links">
       <a href="/">Landing</a>
+      <a href="#concierge">AI Concierge</a>
       <a href="#connect">Connect</a>
       <a href="#upload">Upload</a>
       <a href="#outbox">Outbox</a>
@@ -23,18 +24,57 @@
   </nav>
 
   <main class="shell">
-    <section class="page-head">
-      <span class="badge">Neomorphic control room • live backend only</span>
-      <h1>MEMBRA KPI dashboard.</h1>
-      <p class="lead">Connect this Vercel frontend to the deployed FastAPI backend to see real KPI records, public listings, ProofBook events, and event-outbox delivery state.</p>
+    <section class="page-head hero-lite">
+      <div>
+        <span class="badge">Dark-gold control room • live backend only</span>
+        <h1>MEMBRA operating dashboard.</h1>
+        <p class="lead">Chat with MEMBRA AI, upload real proof, generate private asset drafts, inspect ProofBook hashes, and replay durable events to the backend module network.</p>
+      </div>
+      <div class="card hot command-console">
+        <span class="kicker">System doctrine</span>
+        <h2>Every apartment is the nearest warehouse.</h2>
+        <div class="flow compact"><span>Ask</span><span>Assetify</span><span>List</span><span>Proof</span><span>Settle externally</span></div>
+        <p class="muted">No fake data. No custody. No marketplace visibility without owner confirmation.</p>
+      </div>
+    </section>
+
+    <section id="concierge" class="section grid two concierge-grid">
+      <div class="card hot">
+        <span class="kicker">LLM concierge</span>
+        <h2>Ask MEMBRA anything nearby.</h2>
+        <p class="muted">Use this to turn apartment space, car ad surfaces, first-floor windows, wear ads, tools, storage, or KPI files into concrete MEMBRA actions.</p>
+        <form id="conciergeForm">
+          <div class="input-row stacked">
+            <input id="conciergeInput" placeholder="Example: I have a first-floor window and a car rear window. What can I list?" autocomplete="off" />
+            <button class="primary" type="submit">Ask MEMBRA</button>
+          </div>
+        </form>
+        <div class="quick-grid">
+          <button type="button" onclick="quickAsk('Turn my first-floor window into a review-gated ad surface.')">Window ads</button>
+          <button type="button" onclick="quickAsk('Create a MEMBRA plan for car rear-window ad space.')">Car ads</button>
+          <button type="button" onclick="quickAsk('I want KPI analysis for apartment inventory and local rentable units.')">KPI analysis</button>
+          <button type="button" onclick="quickAsk('How do I go from photo upload to ProofBook and owner-confirmed listing?')">Full flow</button>
+        </div>
+        <div class="mini-grid">
+          <div class="mini"><span class="kicker">Concierge</span><p id="conciergeState" class="status warn">● backend required</p></div>
+          <div class="mini"><span class="kicker">Provider</span><p class="muted">Groq/OpenAI when configured, deterministic fallback otherwise.</p></div>
+        </div>
+      </div>
+      <div class="card ai-panel">
+        <span class="kicker">Response</span>
+        <h2>Guidance and next actions</h2>
+        <div id="conciergeOutput">
+          <div class="bubble ai"><strong>MEMBRA Concierge</strong><br>Connect the backend, then ask what you have, what you want to earn from, or what data you want analyzed. I will map it to proof, SKU, KPI, draft, listing, outbox, and review steps.</div>
+        </div>
+      </div>
     </section>
 
     <section id="connect" class="card hot">
       <span class="kicker">Connection</span>
       <h2>Backend connection</h2>
-      <p class="muted">Set your deployed backend URL. Example: <code>https://your-membra-kpi-api.onrender.com</code> or your Replit deployment URL. You can also append <code>?api=https://your-backend</code> to this page.</p>
+      <p class="muted">Set your deployed backend URL. Example: <code>https://membra-kpi-api.onrender.com</code>. You can also append <code>?api=https://your-backend</code> to this page.</p>
       <div class="input-row">
-        <input id="apiBaseInput" placeholder="https://your-membra-kpi-backend.example.com" autocomplete="url" />
+        <input id="apiBaseInput" placeholder="https://membra-kpi-api.onrender.com" autocomplete="url" />
         <button class="primary" onclick="connectDashboard()">Connect</button>
         <button onclick="clearConnection()">Clear</button>
       </div>
