@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="MEMBRA KPI">
+  <defs>
+    <radialGradient id="g" cx="30%" cy="20%" r="80%">
+      <stop offset="0" stop-color="#fff1b6"/>
+      <stop offset="0.25" stop-color="#ffc857"/>
+      <stop offset="0.56" stop-color="#ff8a1f"/>
+      <stop offset="1" stop-color="#4c1900"/>
+    </radialGradient>
+    <filter id="s" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="18" dy="18" stdDeviation="22" flood-color="#000" flood-opacity="0.55"/>
+      <feDropShadow dx="-8" dy="-8" stdDeviation="18" flood-color="#ffd891" flood-opacity="0.12"/>
+    </filter>
+  </defs>
+  <rect width="512" height="512" rx="128" fill="#050403"/>
+  <circle cx="256" cy="256" r="176" fill="url(#g)" filter="url(#s)"/>
+  <path d="M153 344V168h52l51 88 51-88h52v176h-48V243l-39 68h-32l-39-68v101h-48z" fill="#160900"/>
+</svg>
