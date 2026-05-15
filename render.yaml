@@ -1,0 +1,10 @@
+services:
+  - type: web
+    name: membra-kpi
+    env: docker
+    plan: starter
+    autoDeploy: true
+    healthCheckPath: /api/health
+    envVars:
+      - key: PORT
+        value: 8000
