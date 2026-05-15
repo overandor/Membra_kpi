@@ -1,0 +1,6 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="page-head"><h1>Private Listing Drafts</h1><p>Drafts are not public. Request visibility first, then owner confirmation publishes the listing to the internal marketplace and records payout eligibility.</p></section>
+<section class="card"><h2>Draft lifecycle</h2><div class="flow"><span>draft</span><span>pending_owner_confirmation</span><span>visible_internal_marketplace</span></div></section>
+<section class="cards two">{% for d in drafts %}<div class="card listing"><span>{{ d.sku }}</span><h3>{{ d.title }}</h3><p>{{ d.description }}</p><p><strong>${{ d.suggested_price_low }}–${{ d.suggested_price_high }} / {{ d.pricing_unit }}</strong></p><p class="status">{{ d.status }}</p><button class="btn" onclick="requestVisibility('{{ d.listing_id }}')">Request visibility</button><button class="btn primary" onclick="confirmVisibility('{{ d.listing_id }}')">Confirm visibility</button></div>{% endfor %}</section>
+{% endblock %}
