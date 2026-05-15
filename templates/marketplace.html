@@ -1,0 +1,16 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="page-head"><h1>Internal Marketplace</h1><p>Only owner-confirmed listings appear here. Drafts never appear until the owner confirms visibility.</p></section>
+<section class="cards two">
+  {% for listing in listings %}
+  <a class="card listing link-card" href="/marketplace/{{ listing.public_listing_id }}">
+    <span>{{ listing.sku }}</span>
+    <h3>{{ listing.title }}</h3>
+    <p>{{ listing.description }}</p>
+    <p><strong>${{ listing.price_low }}–${{ listing.price_high }} / {{ listing.pricing_unit }}</strong></p>
+    <small>{{ listing.visibility_status }}</small>
+  </a>
+  {% endfor %}
+</section>
+{% if not listings %}<div class="card empty">No owner-confirmed listings yet. Create drafts in Assetify, request visibility, then confirm visibility.</div>{% endif %}
+{% endblock %}
