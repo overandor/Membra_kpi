@@ -1,0 +1,9 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="page-head"><h1>MEMBRA API Docs</h1><p>Operational endpoints for the all-in-one Replit-style system.</p></section>
+<section class="card"><h2>Endpoints</h2><div class="endpoint-list">{% for e in endpoints %}<code>{{ e }}</code>{% endfor %}</div></section>
+<section class="grid-2">
+  <div class="card"><h2>Photo analyze sample</h2><pre class="json-box">curl -F image=@room.jpg -F owner_id=owner_001 -F room_type=closet -F monetization_goal=storage http://localhost:8000/api/photo/analyze</pre></div>
+  <div class="card"><h2>AI chat sample</h2><pre class="json-box">curl -X POST http://localhost:8000/api/ai/chat -H 'Content-Type: application/json' -d '{"messages":[{"role":"user","content":"Can I monetize my car window?"}]}'</pre></div>
+</section>
+{% endblock %}
