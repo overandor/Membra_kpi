@@ -1,0 +1,17 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="page-head"><h1>AI Concierge</h1><p>Ask MEMBRA how to assetify a real space, vehicle, window, wearable, inventory set, or KPI dataset. The AI can advise, but records are created only through real uploads and owner-confirmed workflows.</p></section>
+<div class="grid-2">
+  <div class="card">
+    <h2>Chat with MEMBRA</h2>
+    <div id="chatLog" class="chat-log"><div class="bubble ai">Describe the asset you control, then upload real proof in Assetify to create inventory.</div></div>
+    <textarea id="chatInput" rows="5" placeholder="Example: I have a first-floor window and a car rear window. What can MEMBRA create?"></textarea>
+    <button class="btn primary" onclick="sendChat()">Send</button>
+  </div>
+  <div class="card">
+    <h2>Opportunity Report</h2>
+    <pre id="opportunityReport" class="json-box">No report yet.</pre>
+    <p class="fine">Estimates are not guaranteed. Eligibility depends on permission, proof, review, local rules, and external settlement rails.</p>
+  </div>
+</div>
+{% endblock %}
