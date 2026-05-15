@@ -1,13 +1,13 @@
 async function loadVercelConfig() {
   try {
-    const res = await fetch('/api/config');
+    const res = await fetch('/membra-config.json', { cache: 'no-store' });
     if (!res.ok) return;
     const data = await res.json();
     if (data.apiBase && !localStorage.getItem('MEMBRA_API_BASE') && !window.MEMBRA_API_BASE) {
       window.MEMBRA_API_BASE = data.apiBase.replace(/\/$/, '');
     }
   } catch (_) {
-    // Static hosting without Vercel functions is still supported through ?api= or localStorage.
+    // Static hosting still works through ?api= or localStorage.
   }
 }
 
@@ -119,7 +119,7 @@ async function loadDashboard() {
 
   if (!api) {
     setHtml('connectionStatus', statusBadge(false, 'backend not configured'));
-    setText('healthJson', pretty({ message: 'Set MEMBRA_API_BASE in Vercel env or use ?api=https://your-backend.example.com' }));
+    setText('healthJson', pretty({ message: 'Set backend API with ?api=https://your-backend.example.com or paste it into the connection box.' }));
     renderCounts({});
     setHtml('listingsTable', emptyState('Backend disconnected', 'Connect a FastAPI backend to show owner-confirmed marketplace records.'));
     setHtml('proofbookTable', emptyState('Backend disconnected', 'Connect a backend to show ProofBook records.'));
