@@ -1,0 +1,43 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="hero grid-2">
+  <div>
+    <div class="badge">AI-Powered • Local-First • Permissioned</div>
+    <h1>Turn idle reality into measurable opportunity.</h1>
+    <p class="lead">Chat with MEMBRA, upload real photos or KPI data, and convert eligible apartment space, storage, car ad space, first-floor windows, and wearable media into inventory, SKUs, ProofBook records, private drafts, and owner-confirmed marketplace listings.</p>
+    <div class="actions"><a class="btn primary" href="/assetify">Upload Photo</a><a class="btn" href="/ai">Chat with AI Concierge</a></div>
+    <p class="fine">AI-generated estimates are not guaranteed. Eligibility depends on permission, proof, review, local rules, and external settlement rails.</p>
+  </div>
+  <div class="card chat-preview">
+    <div class="card-title">MEMBRA AI Concierge</div>
+    <div class="bubble user">How can I monetize my apartment space?</div>
+    <div class="bubble ai">Upload a real photo. MEMBRA will create asset profiles, proof requirements, SKU records, and private listing drafts. Owner approval is required before visibility.</div>
+    <div class="stats-grid mini">
+      <div><b>{{ dashboard.counts.inventory }}</b><span>Inventory</span></div>
+      <div><b>{{ dashboard.counts.drafts }}</b><span>Drafts</span></div>
+      <div><b>{{ dashboard.counts.public_listings }}</b><span>Visible</span></div>
+      <div><b>{{ dashboard.counts.proofs }}</b><span>Proofs</span></div>
+    </div>
+  </div>
+</section>
+<section>
+  <h2>Assetification paths</h2>
+  <div class="cards four">
+    <div class="card asset"><span>Apartment Space</span><h3>Storage • Access • Deliveries</h3><b>$1,200–$2,600</b><small>AI estimate. Not guaranteed.</small></div>
+    <div class="card asset"><span>Car Ad Space</span><h3>Local Mobile Ads</h3><b>$120–$420</b><small>Requires proof and review.</small></div>
+    <div class="card asset"><span>First-Floor Window Ads</span><h3>Street-Facing Media</h3><b>$70–$180</b><small>Building rules apply.</small></div>
+    <div class="card asset"><span>Wear Ads</span><h3>QR/NFC Apparel</h3><b>$30–$90</b><small>Campaign fit required.</small></div>
+  </div>
+</section>
+<section class="card flow-card">
+  <h2>How MEMBRA works</h2>
+  <div class="flow"><span>Chat</span><span>Analyze</span><span>Verify</span><span>SKU</span><span>Draft</span><span>Proof</span><span>Owner Confirm</span><span>Marketplace</span></div>
+</section>
+<section class="cards five">
+  <div class="card trust">ProofBook<br><small>SHA-256 audit trail</small></div>
+  <div class="card trust">QR/NFC Identity<br><small>Scan gateway</small></div>
+  <div class="card trust">Wallet Eligibility<br><small>No custody</small></div>
+  <div class="card trust">Admin Review<br><small>Risk gates</small></div>
+  <div class="card trust">Local Liquidity<br><small>Owner-controlled</small></div>
+</section>
+{% endblock %}
