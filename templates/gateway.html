@@ -1,0 +1,14 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="page-head"><h1>MEMBRA QR Verification</h1><p>This scan was recorded as a ProofBook event. The artifact is a public verification object, not a payment instruction.</p></section>
+<div class="grid-2">
+  <div class="card listing-detail">
+    <span>{{ artifact.artifact_id }}</span>
+    <h2>{{ artifact.artifact_title }}</h2>
+    <p>Status: <strong>{{ artifact.status }}</strong></p>
+    <p>Subject: {{ artifact.subject_type }} / {{ artifact.subject_id }}</p>
+    <p>Destination: {% if artifact.destination_url %}<a href="{{ artifact.destination_url }}">{{ artifact.destination_url }}</a>{% else %}No destination configured{% endif %}</p>
+  </div>
+  <div class="card"><h2>Artifact hash</h2><p class="hash big">{{ artifact.artifact_hash }}</p><p class="fine">Do not enter private keys, seed phrases, raw financial credentials, or unconsented personal material through this gateway.</p></div>
+</div>
+{% endblock %}
