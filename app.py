@@ -14,6 +14,7 @@ import pandas as pd
 import stripe
 import uvicorn
 from fastapi import FastAPI, File, Form, Header, HTTPException, Request, UploadFile
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
@@ -31,7 +32,7 @@ from membra_kpi.security import apply_security_headers, enforce_rate_limit, vali
 from membra_kpi.solana_devnet import anchor_listing_on_solana_devnet, solana_devnet_status
 
 APP_NAME = "MEMBRA KPI Assetification Marketplace"
-APP_VERSION = "1.5.0"
+APP_VERSION = "1.5.1"
 APP_ENV = os.getenv("APP_ENV", "development")
 APP_BASE_URL = os.getenv("APP_BASE_URL", "http://localhost:8000").rstrip("/")
 DB_PATH = Path(os.getenv("DB_PATH", "./data/membra.db"))
@@ -39,6 +40,7 @@ UPLOAD_DIR = Path(os.getenv("UPLOAD_DIR", "./static/uploads"))
 ADMIN_TOKEN = os.getenv("ADMIN_TOKEN", "change-me")
 ADMIN_TOKEN_SHA256 = os.getenv("ADMIN_TOKEN_SHA256", "")
 ALLOWED_HOSTS = [h.strip() for h in os.getenv("ALLOWED_HOSTS", "*").split(",") if h.strip()]
+CORS_ALLOWED_ORIGINS = [h.strip().rstrip("/") for h in os.getenv("CORS_ALLOWED_ORIGINS", "*").split(",") if h.strip()]
 GROQ_API_KEY = os.getenv("GROQ_API_KEY", "")
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
 STRIPE_SECRET_KEY = os.getenv("STRIPE_SECRET_KEY", "")
@@ -50,6 +52,13 @@ DB_PATH.parent.mkdir(parents=True, exist_ok=True)
 UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
 
 app = FastAPI(title=APP_NAME, version=APP_VERSION)
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=CORS_ALLOWED_ORIGINS,
+    allow_credentials=False,
+    allow_methods=["GET", "POST", "OPTIONS"],
+    allow_headers=["Content-Type", "Authorization", "x-admin-token"],
+)
 if ALLOWED_HOSTS != ["*"]:
     app.add_middleware(TrustedHostMiddleware, allowed_hosts=ALLOWED_HOSTS)
 app.mount("/static", StaticFiles(directory="static"), name="static")
