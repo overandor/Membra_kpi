@@ -1,0 +1,6 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="page-head"><h1>ProofBook</h1><p>SHA-256 audit records for photo analysis, inventory mapping, SKU creation, listing drafts, visibility, QR artifacts, scans, and payout eligibility.</p></section>
+<section class="card warning">Do not upload private keys, seed phrases, raw financial credentials, or unconsented personal material.</section>
+<section class="card"><div class="table-wrap"><table><tr><th>Proof ID</th><th>Subject</th><th>Event</th><th>Hash</th><th>Created</th></tr>{% for p in proofs %}<tr><td>{{ p.proof_id }}</td><td>{{ p.subject_type }} / {{ p.subject_id }}</td><td>{{ p.event_type }}</td><td class="hash">{{ p.proof_hash }}</td><td>{{ p.created_at }}</td></tr>{% endfor %}</table></div></section>
+{% endblock %}
