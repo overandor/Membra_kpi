@@ -1,147 +1,182 @@
-# Membra KPI
+# MEMBRA KPI Assetification Marketplace
 
-**Membra KPI is the reporting and analytics module for MEMBRA Labs and the MEMBRA Proof Network.**
+MEMBRA KPI is now a Replit-native, all-in-one FastAPI system for turning real user uploads into structured MEMBRA records.
 
-It converts campaign, proof, QR/NFC scan, owner, advertiser, wallet, relay, and marketplace activity into decision-ready metrics.
+It is not a disconnected mockup. The app persists records in SQLite and connects the full operating loop:
 
-## Company Context
+```text
+real photo upload
+→ inventory detection from context
+→ SKU assignment
+→ KPI cards
+→ ProofBook hashes
+→ private listing drafts
+→ owner visibility request
+→ owner confirmation
+→ internal marketplace listing
+→ payout eligibility record
+```
 
-- Company: **MEMBRA Labs**
-- Flagship product: **MEMBRA Proof Network**
-- Module: **Membra KPI**
-- Category: KPI generator, proof reporting engine, advertiser reports, owner reports, investor scorecards
+## Product promise
 
-## One-Line Thesis
+**Turn idle reality into measurable opportunity.**
 
-Membra KPI turns raw MEMBRA activity into proof-backed dashboards, investor metrics, advertiser reports, owner earnings reports, and operational scorecards.
+Users can upload photos or KPI files and use MEMBRA to structure eligible apartment space, storage, car ad space, first-floor window ads, wearable ads, local handoff capacity, tool access, workspace access, and resale bundles into owner-controlled inventory.
 
-## Product Role
+## What is included
 
-Membra KPI is the analytics layer for the company package.
+- Premium dark-gold neomorphic landing page
+- FastAPI backend
+- Server-rendered Jinja2 UI
+- SQLite persistence
+- Real image upload handling
+- Real CSV/XLSX KPI upload parsing
+- Deterministic photo/context-to-SKU assetification engine
+- SKU map
+- KPI card engine
+- ProofBook SHA-256 audit ledger
+- Private listing drafts
+- Owner-approved marketplace visibility lifecycle
+- QR artifact gateway with scan recording
+- Wallet / payout eligibility records
+- Admin review console with token-protected mutations
+- Optional Groq/OpenAI AI Concierge
+- Optional Stripe checkout/webhook endpoints
+- Replit run configuration
 
-It should produce:
+## Safety and operating boundaries
 
-- campaign reports
-- owner reports
-- advertiser reports
-- proof audit reports
-- payout/reward reports
-- relay reports
-- investor summaries
-- CSV/JSON exports
-- dashboard tables
+MEMBRA KPI follows these rules:
 
-## Core KPI Categories
+- AI may draft inventory; owners must approve visibility.
+- Drafts are private and do not appear in the marketplace.
+- Owner confirmation is required before a public/internal marketplace listing is created.
+- Estimates are not guaranteed.
+- Eligibility depends on permission, proof, review, local rules, lease/building rules, insurance, zoning, and external settlement rails.
+- MEMBRA records payout eligibility only.
+- MEMBRA does not custody funds.
+- External payment rails settle money.
+- Do not upload private keys, seed phrases, raw financial credentials, or unconsented personal material.
 
-### Campaign KPIs
+## Local / Replit run
 
-- campaign status
-- funded budget
-- active placements
-- approved proof rate
-- QR scans
-- NFC taps
-- scan-to-destination rate
-- proof rejection rate
-- cost per verified placement
-- cost per scan
+```bash
+pip install -r requirements.txt
+uvicorn app:app --host 0.0.0.0 --port 8000
+```
 
-### Owner KPIs
+The `.replit` file runs the same command automatically.
 
-- verified assets
-- accepted campaigns
-- proof approval rate
-- estimated earnings
-- released payouts
-- payout hold reasons
-- asset utilization
-- trust score
+Open:
 
-### Advertiser KPIs
+```text
+http://localhost:8000
+```
 
-- campaign spend
-- active placements
-- total scans
-- total taps
-- proof-approved placements
-- geographic coverage
-- creative performance
-- report exports
+## Environment variables
 
-### Operations KPIs
+Copy `.env.example` into Replit Secrets or your local environment.
 
-- kits generated
-- vendor orders
-- kits shipped
-- kits activated
-- proofs needing review
-- claims opened
-- claims resolved
-- payout backlog
+Required for basic local operation: none.
 
-## Production Runtime
+Optional:
 
-This repo contains a Hugging Face-ready `app.py` that profiles uploaded CSV, Excel, JSON, JSONL, or Parquet datasets, generates structured KPI catalogs through Groq, exports JSON/CSV, and exposes Stripe entitlement hooks.
+```text
+APP_BASE_URL=http://localhost:8000
+DB_PATH=./data/membra.db
+UPLOAD_DIR=./static/uploads
+ADMIN_TOKEN=change-me
+GROQ_API_KEY=
+GROQ_MODEL=llama-3.3-70b-versatile
+OPENAI_API_KEY=
+OPENAI_MODEL=gpt-4o-mini
+STRIPE_SECRET_KEY=
+STRIPE_WEBHOOK_SECRET=
+STRIPE_PRICE_ID=
+```
 
-Required secrets:
+Without an LLM key, the AI Concierge still works through deterministic fallback logic. Without Stripe keys, Stripe endpoints return `Stripe not configured.`
 
-- `GROQ_API_KEY`
-- `STRIPE_SECRET_KEY`
-- `STRIPE_WEBHOOK_SECRET`
-- `STRIPE_PRICE_ID`
-- `APP_BASE_URL`
+## Main pages
 
-Optional settings:
-
-- `GROQ_MODEL`
-- `REQUIRE_STRIPE=true`
-- `FREE_DAILY_LIMIT`
-- `PAID_DAILY_LIMIT`
-- `ADMIN_TOKEN`
-
-## API Routes
-
-- `GET /api/health`
-- `GET /api/entitlement?email=user@example.com`
-- `POST /api/stripe/create-checkout-session`
-- `POST /api/stripe/webhook`
-- `POST /api/admin/grant`
-
-## Integration Points
-
-| Repo | KPI Source |
+| Page | Purpose |
 |---|---|
-| `overandor/Membra_ads` | campaigns, media kits, proof, scans, owners, advertisers |
-| `overandor/membra-qr-gateway` | dashboard rendering target |
-| `overandor/Membra_wallet` | funding, reward, payout, reconciliation states |
-| `overandor/Membra_wear` | wearable campaigns and media kits |
-| `overandor/membra-relay` | route, delivery, handoff, and proof-route events |
-| `overandor/Membra_proofbook` | hash records, audit records, verified reports |
-| `overandor/membra` | company hub, buyer package, doctrine, productization docs |
+| `/` | Public landing page and operating-system overview |
+| `/dashboard` | Live record counts and recent activity |
+| `/ai` | AI Concierge chat |
+| `/assetify` | Real photo upload and photo-to-SKU workflow |
+| `/kpi` | CSV/XLSX KPI upload and local analysis |
+| `/inventory` | Inventory and SKU map |
+| `/listings/drafts` | Private listing draft lifecycle |
+| `/marketplace` | Owner-confirmed visible listings only |
+| `/proofbook` | SHA-256 proof ledger |
+| `/wallet` | Payout eligibility and ledger records |
+| `/admin` | Operator review console |
+| `/api-docs` | Endpoint list and examples |
 
-## Output Formats
+## Core API endpoints
 
-- JSON report
-- CSV export
-- dashboard table
-- investor summary
-- advertiser campaign report
-- owner earnings report
-- proof audit report
+```text
+GET  /api/health
+GET  /api/dashboard
+POST /api/ai/chat
+POST /api/photo/analyze
+GET  /api/photos
+GET  /api/inventory
+GET  /api/sku-map
+POST /api/kpi/upload
+GET  /api/kpis
+GET  /api/proofbook
+GET  /api/listings/drafts
+GET  /api/listings/public
+POST /api/listings/{listing_id}/request-visibility
+POST /api/listings/{listing_id}/confirm-visibility
+POST /api/qr/artifacts
+GET  /api/qr/artifacts
+GET  /g/{artifact_id}
+GET  /api/wallet-events
+POST /api/wallet-events
+GET  /api/payout-eligibility
+POST /api/payout-eligibility
+GET  /api/admin/decisions
+POST /api/admin/decisions
+POST /api/stripe/create-checkout-session
+POST /api/stripe/webhook
+```
 
-## Deploy
+## Photo-to-SKU flow
 
-Create a Hugging Face Gradio Space, connect this repository, add the secrets above, and run the Space from `app.py`.
+`POST /api/photo/analyze` accepts multipart form data:
 
-## Safety Rules
+```text
+image: required image file
+owner_id: optional
+room_type: optional
+monetization_goal: optional
+user_notes: optional
+location_hint: optional
+```
 
-- report only observed or demo-labeled data
-- do not imply guaranteed advertiser performance
-- do not imply guaranteed owner income
-- separate estimated, eligible, held, released, and failed rewards
-- label demo data clearly
-- preserve auditability back to proof records
+The endpoint stores the image, extracts image metadata, creates a photo record, runs the assetification engine, creates inventory records, creates SKU records, creates private listing drafts, creates KPI cards, and writes ProofBook records.
 
-## Current Stage
+## Owner visibility lifecycle
 
-Runnable KPI/reporting app plus module documentation. Highest priority is connecting reports directly to `Membra_ads`, `Membra_wallet`, `Membra_proofbook`, and `Membra_demo_data`.
+```text
+draft
+→ pending_owner_confirmation
+→ visible_internal_marketplace
+```
+
+Drafts remain private. `/marketplace` only shows records created after owner confirmation.
+
+## Tests
+
+```bash
+pytest
+```
+
+Current tests cover deterministic assetification, SKU creation, marketplace visibility lifecycle, and ProofBook hash generation.
+
+## Repository role
+
+This repo is now the consolidated MEMBRA KPI wedge: one repo, one Replit-style app, one end-to-end operating loop. The broader MEMBRA ecosystem can still exist as specialized modules, but this repository is the immediate deployable product surface.
