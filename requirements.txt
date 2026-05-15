@@ -7,3 +7,6 @@ stripe>=10.0.0
 openpyxl>=3.1.0
 pyarrow>=15.0.0
 python-multipart>=0.0.9
+pillow>=10.0.0
+pytest>=8.0.0
+ruff>=0.5.0
