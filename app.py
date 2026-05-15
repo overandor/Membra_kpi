@@ -1,4 +1,4 @@
-"""MEMBRA KPI — Replit-native AI Assetification Marketplace.
+"""MEMBRA KPI — production-hardened Replit AI Assetification Marketplace.
 
 Operational scope:
 - real photo uploads become inventory, SKUs, KPI cards, ProofBook records, and private listing drafts
@@ -24,20 +24,32 @@ import pandas as pd
 import stripe
 import uvicorn
 from fastapi import FastAPI, File, Form, Header, HTTPException, Request, UploadFile
-from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
+from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from PIL import Image
+from starlette.middleware.trustedhost import TrustedHostMiddleware
 
 from membra_kpi.assetification import assetify_from_context
 from membra_kpi.marketplace import confirm_visibility, create_listing_draft, request_visibility
 from membra_kpi.proofbook import create_proof_entry, sha256_payload
+from membra_kpi.security import (
+    apply_security_headers,
+    enforce_rate_limit,
+    validate_data_upload,
+    validate_image_upload,
+    verify_admin_token,
+)
 
 APP_NAME = "MEMBRA KPI Assetification Marketplace"
+APP_VERSION = "1.1.0"
+APP_ENV = os.getenv("APP_ENV", "development")
 APP_BASE_URL = os.getenv("APP_BASE_URL", "http://localhost:8000").rstrip("/")
 DB_PATH = Path(os.getenv("DB_PATH", "./data/membra.db"))
 UPLOAD_DIR = Path(os.getenv("UPLOAD_DIR", "./static/uploads"))
 ADMIN_TOKEN = os.getenv("ADMIN_TOKEN", "change-me")
+ADMIN_TOKEN_SHA256 = os.getenv("ADMIN_TOKEN_SHA256", "")
+ALLOWED_HOSTS = [h.strip() for h in os.getenv("ALLOWED_HOSTS", "*").split(",") if h.strip()]
 GROQ_API_KEY = os.getenv("GROQ_API_KEY", "")
 GROQ_MODEL = os.getenv("GROQ_MODEL", "llama-3.3-70b-versatile")
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
@@ -50,9 +62,19 @@ stripe.api_key = STRIPE_SECRET_KEY or None
 DB_PATH.parent.mkdir(parents=True, exist_ok=True)
 UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
 
-app = FastAPI(title=APP_NAME, version="1.0.0")
+app = FastAPI(title=APP_NAME, version=APP_VERSION)
+if ALLOWED_HOSTS != ["*"]:
+    app.add_middleware(TrustedHostMiddleware, allowed_hosts=ALLOWED_HOSTS)
 app.mount("/static", StaticFiles(directory="static"), name="static")
 templates = Jinja2Templates(directory="templates")
+
+
+@app.middleware("http")
+async def security_middleware(request: Request, call_next):
+    enforce_rate_limit(request)
+    response = await call_next(request)
+    apply_security_headers(response)
+    return response
 
 
 def now() -> str:
@@ -66,6 +88,8 @@ def new_id(prefix: str) -> str:
 def db() -> sqlite3.Connection:
     conn = sqlite3.connect(DB_PATH, timeout=30, isolation_level=None)
     conn.row_factory = sqlite3.Row
+    conn.execute("PRAGMA journal_mode=WAL")
+    conn.execute("PRAGMA foreign_keys=ON")
     return conn
 
 
@@ -168,15 +192,20 @@ def insert_proof(subject_type: str, subject_id: str, event_type: str, metadata: 
     return row
 
 
-def ext(filename: str) -> str:
+def safe_extension(filename: str) -> str:
     suffix = Path(filename or "upload").suffix.lower()
-    return suffix if suffix in {".jpg", ".jpeg", ".png", ".webp", ".gif", ".csv", ".xlsx", ".xls"} else ""
+    allowed = {".jpg", ".jpeg", ".png", ".webp", ".csv", ".xlsx", ".xls"}
+    return suffix if suffix in allowed else ""
 
 
-async def save_upload(file: UploadFile, prefix: str) -> tuple[str, Path]:
-    filename = f"{prefix}_{uuid.uuid4().hex}{ext(file.filename or '')}"
-    path = UPLOAD_DIR / filename
+async def save_upload(file: UploadFile, prefix: str, *, kind: str) -> tuple[str, Path]:
     data = await file.read()
+    if kind == "image":
+        validate_image_upload(file.filename or "", file.content_type, data)
+    elif kind == "data":
+        validate_data_upload(file.filename or "", data)
+    filename = f"{prefix}_{uuid.uuid4().hex}{safe_extension(file.filename or '')}"
+    path = UPLOAD_DIR / filename
     path.write_bytes(data)
     return filename, path
 
@@ -190,8 +219,8 @@ def image_meta(path: Path) -> tuple[int, int]:
 
 
 def require_admin(token: str | None) -> None:
-    if not ADMIN_TOKEN or token != ADMIN_TOKEN:
-        raise HTTPException(status_code=401, detail="Valid ADMIN_TOKEN required")
+    if not verify_admin_token(token, plain_token=ADMIN_TOKEN, token_hash=ADMIN_TOKEN_SHA256 or None):
+        raise HTTPException(status_code=401, detail="Valid admin token required")
 
 
 def dashboard_payload() -> dict[str, Any]:
@@ -205,13 +234,15 @@ def dashboard_payload() -> dict[str, Any]:
         "proofs": one("SELECT COUNT(*) c FROM proofbook_entries")["c"],
         "eligible": one("SELECT COALESCE(SUM(eligible_amount_usd),0) c FROM payout_eligibility WHERE status LIKE 'eligible%'")["c"],
     }
-    recent_inventory = rows("SELECT * FROM inventory_items ORDER BY created_at DESC LIMIT 8")
-    recent_kpis = rows("SELECT * FROM kpi_cards ORDER BY created_at DESC LIMIT 10")
-    return {"counts": counts, "recent_inventory": recent_inventory, "recent_kpis": recent_kpis}
+    return {
+        "counts": counts,
+        "recent_inventory": rows("SELECT * FROM inventory_items ORDER BY created_at DESC LIMIT 8"),
+        "recent_kpis": rows("SELECT * FROM kpi_cards ORDER BY created_at DESC LIMIT 10"),
+    }
 
 
 def page(request: Request, name: str, **context: Any) -> HTMLResponse:
-    return templates.TemplateResponse(name, {"request": request, "app_name": APP_NAME, **context})
+    return templates.TemplateResponse(name, {"request": request, "app_name": APP_NAME, "app_env": APP_ENV, **context})
 
 
 @app.get("/", response_class=HTMLResponse)
@@ -280,7 +311,7 @@ def admin_page(request: Request):
 @app.get("/api-docs", response_class=HTMLResponse)
 def docs_page(request: Request):
     endpoints = [
-        "GET /api/health", "GET /api/dashboard", "POST /api/ai/chat", "POST /api/photo/analyze",
+        "GET /api/health", "GET /api/ready", "GET /api/dashboard", "POST /api/ai/chat", "POST /api/photo/analyze",
         "GET /api/photos", "GET /api/inventory", "GET /api/sku-map", "POST /api/kpi/upload", "GET /api/kpis",
         "GET /api/proofbook", "GET /api/listings/drafts", "GET /api/listings/public",
         "POST /api/listings/{listing_id}/request-visibility", "POST /api/listings/{listing_id}/confirm-visibility",
@@ -293,7 +324,23 @@ def docs_page(request: Request):
 
 @app.get("/api/health")
 def health():
-    return {"ok": True, "app": APP_NAME, "db": str(DB_PATH), "mode": "operational_rule_engine", "llm_configured": bool(GROQ_API_KEY or OPENAI_API_KEY)}
+    return {"ok": True, "app": APP_NAME, "version": APP_VERSION, "env": APP_ENV, "mode": "production_hardened_starter"}
+
+
+@app.get("/api/ready")
+def ready():
+    try:
+        counts = dashboard_payload()["counts"]
+    except Exception as exc:
+        raise HTTPException(503, f"database not ready: {exc}")
+    warnings: list[str] = []
+    if ADMIN_TOKEN in {"", "change-me"} and not ADMIN_TOKEN_SHA256:
+        warnings.append("ADMIN_TOKEN is default; set ADMIN_TOKEN_SHA256 or a strong ADMIN_TOKEN before public deployment")
+    if not (GROQ_API_KEY or OPENAI_API_KEY):
+        warnings.append("LLM not configured; deterministic fallback is active")
+    if not STRIPE_SECRET_KEY:
+        warnings.append("Stripe not configured; payout eligibility records only")
+    return {"ok": True, "counts": counts, "warnings": warnings}
 
 
 @app.get("/api/dashboard")
@@ -310,7 +357,7 @@ async def analyze_photo(
     user_notes: str = Form(""),
     location_hint: str = Form(""),
 ):
-    filename, path = await save_upload(image, "photo")
+    filename, path = await save_upload(image, "photo", kind="image")
     width, height = image_meta(path)
     photo_id = new_id("photo")
     result = assetify_from_context(
@@ -382,17 +429,14 @@ def summarize_dataframe(df: pd.DataFrame) -> dict[str, Any]:
     }
     suggested = [
         "revenue trend" if any("revenue" in c.lower() or "sales" in c.lower() for c in df.columns) else "activity volume",
-        "utilization rate",
-        "top category mix",
-        "missing data risk",
-        "proof/readiness score",
+        "utilization rate", "top category mix", "missing data risk", "proof/readiness score",
     ]
     return {"summary": summary, "suggested_kpis": suggested}
 
 
 @app.post("/api/kpi/upload")
 async def upload_kpi(file: UploadFile = File(...)):
-    filename, path = await save_upload(file, "dataset")
+    filename, path = await save_upload(file, "dataset", kind="data")
     suffix = Path(filename).suffix.lower()
     if suffix == ".csv":
         df = pd.read_csv(path)
@@ -521,7 +565,7 @@ def create_admin_decision(payload: dict[str, Any], x_admin_token: str | None = H
     require_admin(x_admin_token)
     decision_id = new_id("decision")
     execute("INSERT INTO admin_decisions VALUES(?,?,?,?,?,?,?,?)", (decision_id, payload.get("subject_type", "manual"), payload.get("subject_id", ""), payload.get("decision", "reviewed"), payload.get("operator", "admin"), payload.get("risk_level", "normal"), payload.get("notes", ""), now()))
-    insert_proof(payload.get("subject_type", "manual"), payload.get("subject_id", decision_id), "proof_reviewed" if False else "photo_analyzed", {"admin_decision": payload.get("decision", "reviewed")})
+    insert_proof(payload.get("subject_type", "manual"), payload.get("subject_id", decision_id), "admin_decision_recorded", {"decision_id": decision_id, "admin_decision": payload.get("decision", "reviewed")})
     return {"success": True, "decision_id": decision_id}
 
 
@@ -556,7 +600,6 @@ def fallback_ai(message: str) -> dict[str, Any]:
 def ai_chat(payload: dict[str, Any]):
     messages = payload.get("messages", [])
     latest = messages[-1].get("content", "") if messages else ""
-    response = None
     system = "You are MEMBRA AI Concierge. Produce concise structured assetification advice. Never guarantee earnings. Require ownership/control, permission, proof, admin review, and external settlement rails."
     if GROQ_API_KEY:
         try:
